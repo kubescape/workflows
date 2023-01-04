@@ -1,0 +1,84 @@
+name: pull_request_created
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches:
+      - 'master'
+      - 'main'
+    paths-ignore:
+      - '**/**.md' ### Do not run the workflow if Mardown files changed.
+      - '.github/workflows/*' ### Do not run the workflow if files under path: .github/workflows/* changed.
+
+  workflow_call:
+    inputs:
+      GO_VERSION:
+        required: true
+        type: string
+    secrets:
+      SNYK_TOKEN:
+        required: true
+
+jobs:
+  pr-scanner:
+    runs-on: ubuntu-latest 
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          
+      - uses: actions/setup-go@v3
+        name: Installing go
+        with:
+          go-version: ${{ inputs.GO_VERSION }}
+          cache: true
+
+      - name: Scanning - Forbidden Licenses (go-licenses)
+        id: licenses-scan
+        continue-on-error: true
+        run: |
+          echo "## Installing go-licenses tool"
+          go install github.com/google/go-licenses@latest
+          echo "## Scanning for forbiden licenses ##"
+          go-licenses check .
+
+      - name: Scanning - Credentials (GitGuardian)
+        continue-on-error: true      
+        id: credentials-scan
+        uses: GitGuardian/ggshield/actions/secret@main        
+        env:          
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}         
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}          
+          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}          
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}         
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+
+      - name: Scanning - Vulnerabilities (Snyk)
+        id: vulnerabilities-scan
+        continue-on-error: true
+        uses: snyk/actions/golang@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run unit test
+        id: unit-test
+        run: go test -v ./...
+
+      - name: Go build
+        id: build
+        env:
+          CGO_ENABLED: 0
+        run: go build -v ./...
+
+      - name: Comment results to PR
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number:  ${{ github.event.pull_request.number }}
+          body: |
+            Results:
+            - License scan: ${{ steps.licenses-scan.outcome }}
+            - Credentials scan: ${{ steps.credentials-scan.outcome }}
+            - Vulnerabilities scan: ${{ steps.vulnerabilities-scan.outcome }}
+            - Unit test: ${{ steps.unit-test.outcome }}
+            - Go build: ${{ steps.build.outcome }}
+          reactions: 'eyes'
