@@ -212,7 +212,7 @@ jobs:
           username: ${{ secrets.QUAYIO_REGISTRY_USERNAME }}
           password: ${{ secrets.QUAYIO_REGISTRY_PASSWORD }}
 
-      - name: Docker retag ## NOTE: need to remove the "-test" from the image repo
+      - name: Docker retag
         run: |
           curl -L https://github.com/regclient/regclient/releases/download/v0.4.4/regctl-linux-amd64 >regctl
           chmod 755 regctl
