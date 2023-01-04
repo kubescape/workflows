@@ -42,7 +42,7 @@ on:
 
 jobs:
   docker-build:
-    if: ${{ (contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) }}  
+    if: ${{ (contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape' }}  
     runs-on: ubuntu-latest
     outputs:
       IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
