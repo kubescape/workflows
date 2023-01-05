@@ -230,8 +230,7 @@ jobs:
         uses: ncipollo/release-action@v1.11.1
         with:
           token:  ${{ secrets.GITHUB_TOKEN }}
-          tag: v0.0.${{ inputs.TAG_NAME }}
-          name: Release v0.0.${{ inputs.IMAGE_TAG }}
+          name: Release ${{ inputs.IMAGE_TAG }}
           draft: true
           prerelease: false
           body: ${{ github.event.pull_request.body }}
