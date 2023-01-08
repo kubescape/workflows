@@ -232,7 +232,7 @@ jobs:
           token:  ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ inputs.IMAGE_TAG }}
           name: Release ${{ inputs.IMAGE_TAG }}
-          draft: true
+          draft: false
           prerelease: false
           body: ${{ github.event.pull_request.body }}
 
