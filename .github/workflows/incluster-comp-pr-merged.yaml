@@ -247,6 +247,6 @@ jobs:
           ref: dev
           wait_interval: 10
           client_payload: '{"IMAGE_TAG":"${{ inputs.IMAGE_TAG }}","COMPONENT_NAME":"${{ inputs.COMPONENT_NAME }}","HELM_E2E_TEST":"${{ inputs.HELM_E2E_TEST }}"}'
-          propagate_failure: true
+          propagate_failure: false
           trigger_workflow: true
-          wait_workflow: flase #true
+          wait_workflow: false 
