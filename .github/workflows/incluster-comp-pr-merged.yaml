@@ -236,17 +236,27 @@ jobs:
           prerelease: false
           body: ${{ github.event.pull_request.body }}
 
+
       - name: Trigger helm chart workflow
-        uses: convictional/trigger-workflow-and-wait@v1.6.5
+        uses: benc-uk/workflow-dispatch@v1.2.2
         with:
-          owner: ${{ github.repository_owner }}
-          repo: helm-charts
-          github_token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          github_user: kubescape
-          workflow_file_name: 00-cicd.yaml
+          workflow: 00-cicd.yaml
+          repo: kubescape/helm-charts
           ref: dev
-          wait_interval: 10
-          client_payload: '{"IMAGE_TAG":"${{ inputs.IMAGE_TAG }}","COMPONENT_NAME":"${{ inputs.COMPONENT_NAME }}","HELM_E2E_TEST":"${{ inputs.HELM_E2E_TEST }}"}'
-          propagate_failure: false
-          trigger_workflow: true
-          wait_workflow: false 
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          inputs: '{"IMAGE_TAG":"${{ inputs.IMAGE_TAG }}","COMPONENT_NAME":"${{ inputs.COMPONENT_NAME }}","HELM_E2E_TEST":"${{ inputs.HELM_E2E_TEST }}"}'
+          
+      # - name: Trigger helm chart workflow
+      #   uses: convictional/trigger-workflow-and-wait@v1.6.5
+      #   with:
+      #     owner: ${{ github.repository_owner }}
+      #     repo: helm-charts
+      #     github_token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+      #     github_user: kubescape
+      #     workflow_file_name: 00-cicd.yaml
+      #     ref: dev
+      #     client_payload: '{"IMAGE_TAG":"${{ inputs.IMAGE_TAG }}","COMPONENT_NAME":"${{ inputs.COMPONENT_NAME }}","HELM_E2E_TEST":"${{ inputs.HELM_E2E_TEST }}"}'
+      #     propagate_failure: false
+      #     trigger_workflow: true
+      #     wait_workflow: false 
+      #     wait_interval: 10
