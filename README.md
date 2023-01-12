@@ -61,10 +61,11 @@ As I mentioned before, the previous job has triggered the Helm chart CICD workfl
 The Helm chart CICD will:
 * Update the new tag of the specific component in the helm values file
 * Bump the chart version
+* Commit new changes to ```dev``` branch.
 * Create a new PR from the ```dev``` branch to the ```master``` branch.
 * Run E2E tests (```helm-branch: dev```)
 * Merge the PR
 * Create a new helm release
 
-###A draw of the flow:
+### A draw of the flow:
 ![Workflow](./assets/incluster_component_flow.jpeg)
