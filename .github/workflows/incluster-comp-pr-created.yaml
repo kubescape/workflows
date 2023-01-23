@@ -20,6 +20,9 @@ on:
 
 jobs:
   pr-scanner:
+    env:
+       GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     runs-on: ubuntu-latest 
     steps:
       - uses: actions/checkout@v3
@@ -43,6 +46,7 @@ jobs:
           go-licenses check .
 
       - name: Scanning - Credentials (GitGuardian)
+        if: ${{ env.GITGUARDIAN_API_KEY }}
         continue-on-error: true      
         id: credentials-scan
         uses: GitGuardian/ggshield/actions/secret@main        
@@ -54,6 +58,7 @@ jobs:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
 
       - name: Scanning - Vulnerabilities (Snyk)
+        if: ${{ env.SNYK_TOKEN }}
         id: vulnerabilities-scan
         continue-on-error: true
         uses: snyk/actions/golang@master
@@ -71,7 +76,7 @@ jobs:
         run: go build -v ./...
 
       - name: Comment results to PR
-        uses: peter-evans/create-or-update-comment@v2
+        uses: peter-evans/create-or-update-comment@v2.1.0
         with:
           issue-number:  ${{ github.event.pull_request.number }}
           body: |
