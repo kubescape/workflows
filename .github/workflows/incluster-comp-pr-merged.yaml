@@ -14,7 +14,6 @@ on:
       GO_VERSION:
         required: true
         type: string
-        default: "1.18"
       GO111MODULE:
         required: true
         type: string
