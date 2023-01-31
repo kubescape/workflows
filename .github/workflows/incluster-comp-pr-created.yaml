@@ -95,7 +95,8 @@ jobs:
         run: go build -v ./...
 
       - name: Comment results to PR
-        uses: peter-evans/create-or-update-comment@v2.1.0
+        uses: peter-evans/create-or-update-comment@v2
+        continue-on-error: true # This step typically fails when opening PRs from forks 
         with:
           issue-number:  ${{ github.event.pull_request.number }}
           body: |
