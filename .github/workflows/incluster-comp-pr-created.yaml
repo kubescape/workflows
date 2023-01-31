@@ -38,6 +38,9 @@ jobs:
             echo "is-snyk-set=${{ env.SNYK_TOKEN != '' }}" >> $GITHUB_OUTPUT
 
   pr-scanner:
+    env:
+       GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     runs-on: ubuntu-latest 
     needs: [check-secret]
     steps:
