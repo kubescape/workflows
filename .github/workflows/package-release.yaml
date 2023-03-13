@@ -19,7 +19,7 @@ jobs:
   test:
     permissions:
       pull-requests: write
-    uses: ./.github/workflows/pr-go-basic-tests.yaml
+    uses: ./.github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: ${{ inputs.GO_VERSION }}
       GO111MODULE: ${{ inputs.GO111MODULE }}
@@ -27,6 +27,7 @@ jobs:
     secrets: inherit
 
   release:
+    needs: test
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
