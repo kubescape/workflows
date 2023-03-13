@@ -1,0 +1,44 @@
+name: Release
+on:
+  workflow_call:
+    inputs:
+      GO_VERSION:
+        required: true
+        type: string
+      GO111MODULE:
+        required: true
+        type: string
+      CGO_ENABLED:
+        required: true
+        type: number
+      RELEASE:
+        required: true
+        type: string
+
+jobs:
+  test:
+    permissions:
+      pull-requests: write
+    uses: ./.github/workflows/go-basic-tests.yaml
+    with:
+      GO_VERSION: ${{ inputs.GO_VERSION }}
+      GO111MODULE: ${{ inputs.GO111MODULE }}
+      CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
+    secrets: inherit
+
+  release:
+    needs: test
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Create a release
+      id: create_release
+      uses: actions/create-release@v1
+      with:
+        tag_name: ${{ input.RELEASE }}
+        draft: false
+        prerelease: false
