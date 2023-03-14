@@ -1,0 +1,32 @@
+name: pr-checks
+
+on:
+  pull_request:
+    types: [ edited, opened, synchronize, reopened ]
+    paths-ignore:
+      - '**.md' ### Ignore running when .md files change
+
+jobs:
+  validate-go-basic-tests-file:
+    permissions:
+      pull-requests: write
+    uses: .github/workflows/go-basic-tests.yaml
+    with:
+      GO_VERSION: 1.19
+      BUILD_PATH: workflows/testdata
+      UNIT_TESTS_PATH: workflows/testdata
+    secrets: inherit
+
+  validate-package-releaser-file:
+    permissions:
+      pull-requests: write
+    uses: .github/workflows/package-releaser.yaml
+    with:
+      GO_VERSION: 1.19
+      IS_DRAFT: true
+      BUILD_PATH: workflows/testdata
+      UNIT_TESTS_PATH: workflows/testdata
+    secrets: inherit
+
+  # TODO: Remove created tag
+ 
