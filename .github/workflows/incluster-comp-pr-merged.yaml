@@ -18,8 +18,9 @@ on:
         required: true
         type: string
       CGO_ENABLED:
-        required: true
+        required: false
         type: number
+        default: 1
       BUILD_PLATFORM:
         required: false
         type: string
