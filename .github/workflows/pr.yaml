@@ -10,7 +10,7 @@ jobs:
   validate-go-basic-tests-file:
     permissions:
       pull-requests: write
-    uses: .github/workflows/go-basic-tests.yaml@main
+    uses: ./.github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: 1.19
       BUILD_PATH: "./..."
@@ -20,7 +20,7 @@ jobs:
   validate-package-releaser-file:
     permissions:
       pull-requests: write
-    uses: .github/workflows/package-releaser.yaml@main
+    uses: ./.github/workflows/package-releaser.yaml
     with:
       GO_VERSION: 1.19
       IS_DRAFT: true
