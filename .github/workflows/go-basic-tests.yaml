@@ -12,6 +12,7 @@ on:
       CGO_ENABLED:
         required: false
         type: number
+        default: 1
       BUILD_PATH:
         required: false
         type: string
@@ -49,7 +50,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
+      CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
     strategy:
       matrix:
         os: [ubuntu-20.04, macos-latest, windows-latest]
@@ -65,7 +66,12 @@ jobs:
           cache: true
 
       - name: Test race conditions
+        if: ${{ inputs.CGO_ENABLED }} == 1
         run: go test -v -race ${{ inputs.UNIT_TESTS_PATH }}
+
+      - name: Test without race conditions
+        if: ${{ inputs.CGO_ENABLED }} != 1
+        run: go test -v ${{ inputs.UNIT_TESTS_PATH }}
 
       - name: Test go build  
         run: go build -v ${{ inputs.BUILD_PATH }}
@@ -75,7 +81,7 @@ jobs:
       GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
+      CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
     runs-on: ubuntu-latest
     needs: [Check-secret, Environment-Test]
     steps:
