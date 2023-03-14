@@ -66,11 +66,11 @@ jobs:
           cache: true
 
       - name: Test race conditions
-        if: ${{ inputs.CGO_ENABLED }} == 1
+        if: ${{ env.CGO_ENABLED == 1 }}
         run: go test -v -race ${{ inputs.UNIT_TESTS_PATH }}
 
       - name: Test without race conditions
-        if: ${{ inputs.CGO_ENABLED }} != 1
+        if: ${{ env.CGO_ENABLED != 1 }}
         run: go test -v ${{ inputs.UNIT_TESTS_PATH }}
 
       - name: Test go build  
