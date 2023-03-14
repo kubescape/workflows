@@ -241,7 +241,7 @@ jobs:
         with:
           workflow: 00-cicd.yaml
           repo: kubescape/helm-charts
-          ref: dev
+          ref: main
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           inputs: '{"IMAGE_TAG":"${{ inputs.IMAGE_TAG }}","COMPONENT_NAME":"${{ inputs.COMPONENT_NAME }}","HELM_E2E_TEST":"${{ inputs.HELM_E2E_TEST }}","CHANGE_TAG":"true"}'
           
