@@ -13,8 +13,8 @@ jobs:
     uses: .github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: 1.19
-      BUILD_PATH: workflows/testdata
-      UNIT_TESTS_PATH: workflows/testdata
+      BUILD_PATH: "./..."
+      UNIT_TESTS_PATH: "./..."
     secrets: inherit
 
   validate-package-releaser-file:
