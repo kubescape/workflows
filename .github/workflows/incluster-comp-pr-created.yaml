@@ -24,8 +24,7 @@ jobs:
   test:
     permissions:
       pull-requests: write
-    uses: .github/workflows/go-basic-tests.yaml
+    uses: ./.github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: 1.19
-      RELEASE: "v0.0.${{ github.run_number }}"
     secrets: inherit
