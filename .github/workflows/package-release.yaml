@@ -14,6 +14,18 @@ on:
       RELEASE:
         required: true
         type: string
+      IS_DRAFT:
+        required: false
+        type: boolean
+        default: false
+      BUILD_PATH:
+        required: false
+        type: string
+        default: "./..."
+      UNIT_TESTS_PATH:
+        required: false
+        type: string
+        default: "./..."
 
 jobs:
   test:
@@ -24,6 +36,8 @@ jobs:
       GO_VERSION: ${{ inputs.GO_VERSION }}
       GO111MODULE: ${{ inputs.GO111MODULE }}
       CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
+      UNIT_TESTS_PATH: ${{ inputs.UNIT_TESTS_PATH }}
+      BUILD_PATH: ${{ inputs.BUILD_PATH }}
     secrets: inherit
 
   release:
@@ -39,6 +53,7 @@ jobs:
       id: create_release
       uses: actions/create-release@v1
       with:
+        release: "Release: ${{ input.RELEASE }}"
         tag_name: ${{ input.RELEASE }}
-        draft: false
+        draft: ${{ input.IS_DRAFT }}
         prerelease: false

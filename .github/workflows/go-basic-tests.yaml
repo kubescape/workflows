@@ -12,6 +12,15 @@ on:
       CGO_ENABLED:
         required: false
         type: number
+      BUILD_PATH:
+        required: false
+        type: string
+        default: "./..."
+      UNIT_TESTS_PATH:
+        required: false
+        type: string
+        default: "./..."
+
     secrets:
       SNYK_TOKEN:
         required: false
@@ -56,10 +65,10 @@ jobs:
           cache: true
 
       - name: Test race conditions
-        run: go test -v -race ./...
+        run: go test -v -race ${{ inputs.UNIT_TESTS_PATH }}
 
       - name: Test go build  
-        run: go build -v ./...
+        run: go build -v ${{ inputs.BUILD_PATH }}
 
   Basic-Test:
     env:
@@ -116,7 +125,7 @@ jobs:
         only-new-issues: true
       
     - name: Test coverage
-      run: go test -v ./... -covermode=count -coverprofile=coverage.out
+      run: go test -v ${{ inputs.UNIT_TESTS_PATH }} -covermode=count -coverprofile=coverage.out
 
     - name: Convert coverage count to lcov format
       uses: jandelgado/gcov2lcov-action@v1
