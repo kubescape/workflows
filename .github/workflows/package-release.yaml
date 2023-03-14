@@ -9,8 +9,9 @@ on:
         required: true
         type: string
       CGO_ENABLED:
-        required: true
+        required: false
         type: number
+        default: 1
       RELEASE:
         required: true
         type: string

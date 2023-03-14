@@ -26,5 +26,9 @@ jobs:
       pull-requests: write
     uses: ./.github/workflows/go-basic-tests.yaml
     with:
-      GO_VERSION: 1.19
+      GO_VERSION: ${{ inputs.GO_VERSION }}
+      GO111MODULE: ${{ inputs.GO111MODULE }}
+      CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
+      UNIT_TESTS_PATH: ${{ inputs.UNIT_TESTS_PATH }}
+      BUILD_PATH: ${{ inputs.BUILD_PATH }}
     secrets: inherit
