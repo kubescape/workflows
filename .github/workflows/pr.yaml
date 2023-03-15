@@ -32,12 +32,12 @@ jobs:
   validate-package-releaser-file:
     permissions:
       pull-requests: write
-    uses: ./.github/workflows/package-releaser.yaml
+    uses: ./.github/workflows/package-release.yaml
     with:
       GO_VERSION: 1.19
       IS_DRAFT: true
-      BUILD_PATH: workflows/testdata
-      UNIT_TESTS_PATH: workflows/testdata
+      BUILD_PATH: "./testdata/."
+      UNIT_TESTS_PATH: "./testdata/."
     secrets: inherit
 
   # TODO: Remove created tag
