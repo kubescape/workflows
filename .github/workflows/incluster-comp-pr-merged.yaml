@@ -38,6 +38,7 @@ on:
       TRIGGER_HELM_CICD:
         required: false
         default: true
+        type: boolean
       HELM_E2E_TEST:
         required: false
         default: false
