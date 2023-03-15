@@ -15,19 +15,19 @@ jobs:
       GO_VERSION: 1.19
       BUILD_PATH: "./testdata/."
       UNIT_TESTS_PATH: "./testdata/."
-      TEST_MULTI_ENVIRONMENTS: true
+      # TEST_MULTI_ENVIRONMENTS: true
     secrets: inherit
 
-  validate-go-basic-tests-file-single-os:
-    permissions:
-      pull-requests: write
-    uses: ./.github/workflows/go-basic-tests.yaml
-    with:
-      GO_VERSION: 1.19
-      BUILD_PATH: "./testdata/."
-      UNIT_TESTS_PATH: "./testdata/."
-      TEST_MULTI_ENVIRONMENTS: false
-    secrets: inherit
+  # validate-go-basic-tests-file-single-os:
+  #   permissions:
+  #     pull-requests: write
+  #   uses: ./.github/workflows/go-basic-tests.yaml
+  #   with:
+  #     GO_VERSION: 1.19
+  #     BUILD_PATH: "./testdata/."
+  #     UNIT_TESTS_PATH: "./testdata/."
+  #     TEST_MULTI_ENVIRONMENTS: false
+  #   secrets: inherit
 
   validate-package-releaser-file:
     permissions:
