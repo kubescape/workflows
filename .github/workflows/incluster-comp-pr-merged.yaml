@@ -35,6 +35,9 @@ on:
         default: false
         type: boolean
         description: 'run cosign on released image'
+      TRIGGER_HELM_CICD:
+        required: false
+        default: true
       HELM_E2E_TEST:
         required: false
         default: false
@@ -237,6 +240,7 @@ jobs:
 
 
       - name: Trigger helm chart workflow
+        if: ${{ inputs.TRIGGER_HELM_CICD == true }}
         uses: benc-uk/workflow-dispatch@v1.2.2
         with:
           workflow: 00-cicd.yaml
