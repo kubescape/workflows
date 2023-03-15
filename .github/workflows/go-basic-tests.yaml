@@ -110,7 +110,6 @@ jobs:
       name: Setup Go 
       with:
         go-version: ${{ inputs.GO_VERSION }}
-        cache: true
 
     - name: Scanning - Forbidden Licenses (go-licenses)
       id: licenses-scan
