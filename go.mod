@@ -1,3 +1,3 @@
-module github.com/kubescape/workflows
+module workflows
 
 go 1.19

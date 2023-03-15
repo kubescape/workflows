@@ -1,4 +1,3 @@
 go 1.19
 
 use ./testdata
-use .

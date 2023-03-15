@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       GO111MODULE:
-        required: true
+        required: false
         type: string
       CGO_ENABLED:
         required: false
@@ -69,7 +69,6 @@ jobs:
         name: Installing go
         with:
           go-version: ${{ inputs.GO_VERSION }}
-          cache: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
