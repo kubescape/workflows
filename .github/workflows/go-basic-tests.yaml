@@ -79,11 +79,10 @@ jobs:
         with:
           submodules: recursive
   
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         name: Setup Go 
         with:
           go-version: ${{ inputs.GO_VERSION }}
-          cache: true
 
       - name: Test race conditions
         if: ${{ env.CGO_ENABLED == 1 }}

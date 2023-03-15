@@ -30,6 +30,7 @@ jobs:
   #   secrets: inherit
 
   validate-package-releaser-file:
+    needs: validate-go-basic-tests-file
     permissions:
       pull-requests: write
     uses: ./.github/workflows/package-release.yaml
