@@ -143,12 +143,14 @@ jobs:
     - name: Test go linting 
       continue-on-error: true  # TODO: Should be removed
       uses: golangci/golangci-lint-action@v3
+      id: linting
       with:
         version: latest
         args: --timeout 10m
         only-new-issues: true
       
     - name: Test coverage
+      id: unit-test
       run: go test -v ${{ inputs.UNIT_TESTS_PATH }} -covermode=count -coverprofile=coverage.out
 
     - name: Convert coverage count to lcov format
@@ -171,6 +173,6 @@ jobs:
           - Credentials scan: ${{ steps.credentials-scan.outcome }}
           - Vulnerabilities scan: ${{ steps.vulnerabilities-scan.outcome }}
           - Unit test: ${{ steps.unit-test.outcome }}
-          - Go build: ${{ steps.build.outcome }}
+          - Go linting: ${{ steps.linting.outcome }}
         reactions: 'eyes'
 
