@@ -79,7 +79,7 @@ jobs:
         with:
           submodules: recursive
   
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v3
         name: Setup Go 
         with:
           go-version: ${{ inputs.GO_VERSION }}
