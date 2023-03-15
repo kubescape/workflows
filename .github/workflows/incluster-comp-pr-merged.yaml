@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       GO111MODULE:
-        required: true
+        required: false
         type: string
       CGO_ENABLED:
         required: false
