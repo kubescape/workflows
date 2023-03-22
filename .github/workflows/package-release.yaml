@@ -51,13 +51,14 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Create a release
+    - name: Create Tag and Release
       id: create_release
-      uses: actions/create-release@v1
+      uses: ncipollo/release-action@v1.11.1
       with:
-        release_name: "Release: ${{ inputs.RELEASE }}"
-        tag_name: ${{ inputs.RELEASE }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ inputs.RELEASE }}
+        name: Release ${{ inputs.RELEASE }}
         draft: ${{ inputs.IS_DRAFT }}
         prerelease: false
+        body: ${{ github.event.pull_request.body }}
+
