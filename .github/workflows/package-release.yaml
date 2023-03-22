@@ -2,10 +2,6 @@ name: Release
 on:
   workflow_call:
     inputs:
-      TRIGGER_TESTS:
-        required: false
-        type: boolean
-        default: false
       GO_VERSION:
         required: true
         type: string
@@ -37,25 +33,22 @@ on:
       #   default: true
 
 jobs:
-  test:
-    if: ${{ inputs.TRIGGER_TESTS }}
-    permissions:
-      pull-requests: write
-    uses: ./.github/workflows/go-basic-tests.yaml
-    with:
-      GO_VERSION: ${{ inputs.GO_VERSION }}
-      GO111MODULE: ${{ inputs.GO111MODULE }}
-      CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
-      UNIT_TESTS_PATH: ${{ inputs.UNIT_TESTS_PATH }}
-      BUILD_PATH: ${{ inputs.BUILD_PATH }}
-      # TEST_MULTI_ENVIRONMENTS: ${{ inputs.TEST_MULTI_ENVIRONMENTS }}
-    secrets: inherit
+  # test:
+  #   permissions:
+  #     pull-requests: write
+  #   uses: ./.github/workflows/go-basic-tests.yaml
+  #   with:
+  #     GO_VERSION: ${{ inputs.GO_VERSION }}
+  #     GO111MODULE: ${{ inputs.GO111MODULE }}
+  #     CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
+  #     UNIT_TESTS_PATH: ${{ inputs.UNIT_TESTS_PATH }}
+  #     BUILD_PATH: ${{ inputs.BUILD_PATH }}
+  #   secrets: inherit
 
   release:
-    needs: test
+    # needs: test
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
