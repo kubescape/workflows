@@ -2,6 +2,10 @@ name: Release
 on:
   workflow_call:
     inputs:
+      TRIGGER_TESTS:
+        required: false
+        type: boolean
+        default: false
       GO_VERSION:
         required: true
         type: string
@@ -34,6 +38,7 @@ on:
 
 jobs:
   test:
+    if: ${{ inputs.TRIGGER_TESTS }}
     permissions:
       pull-requests: write
     uses: ./.github/workflows/go-basic-tests.yaml
