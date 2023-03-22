@@ -50,6 +50,8 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
     - name: Create Tag and Release
       id: create_release
@@ -60,5 +62,4 @@ jobs:
         name: Release ${{ inputs.RELEASE }}
         draft: ${{ inputs.IS_DRAFT }}
         prerelease: false
-        body: ${{ github.event.pull_request.body }}
 
