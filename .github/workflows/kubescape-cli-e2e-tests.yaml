@@ -2,14 +2,14 @@ name: ks-cli-dynamic-e2e-test
 on:
   workflow_call:
     inputs:
-      # DOWNLOAD_ARTIFACT_PATH:
-      #   description: 'Download artifact path'
-      #   required: true
-      #   type: string
-      # DOWNLOAD_ARTIFACT_KEY_NAME:
-      #   description: 'Download artifact Key name'
-      #   required: true
-      #   type: string
+      DOWNLOAD_ARTIFACT_PATH:
+        description: 'Download artifact path'
+        required: true
+        type: string
+      DOWNLOAD_ARTIFACT_KEY_NAME:
+        description: 'Download artifact Key name'
+        required: true
+        type: string
       USE_ARTIFACTS_FILE:
         description: 'The base file name that need to be used by "use_artifacts" kwargs flag (systests)'
         required: false
