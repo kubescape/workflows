@@ -77,8 +77,8 @@ jobs:
       - uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # ratchet:actions/download-artifact@v3.0.2
         id: download-artifact
         with:
-          name: ${{ env.DOWNLOAD_ARTIFACT_KEY_NAME }}
-          path: ${{ env.DOWNLOAD_ARTIFACT_PATH }}
+          name: ${{ inputs.DOWNLOAD_ARTIFACT_KEY_NAME }}
+          path: ${{ inputs.DOWNLOAD_ARTIFACT_PATH }}
 
       - run: ls -laR
 
