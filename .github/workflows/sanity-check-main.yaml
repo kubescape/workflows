@@ -2,26 +2,36 @@ name: test-list
 
   # Controls when the workflow will run
 on:
-  workflow_dispatch:
+  # workflow_dispatch:
   # Triggers the workflow every 5 minutes
   # schedule:
-  #   - cron: "*/30 * * * *"
+  # - cron: "*/30 * * * *"
 
+  - push:
+      branches:
+      - sanity_check
+      
+  - pull_request:
+    # Sequence of patterns matched against refs/heads
+    branches:    
+      - sanity_check
 
 jobs:
   ks-and-rego-test:
     name: ks-and-rego-test
-    uses: ./.github/workflows/sanity-check.yaml@sanity_check
+    uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
-      BINARY_TESTS: '[ "scan_nsa", 
+      BINARY_TESTS: '[ 
+                        "scan_nsa", 
                         "scan_mitre"
                       ]'
     secrets: inherit
 
   better-up-time:
+    needs: [ks-and-repo-test]
     name: better-up-time
     runs-on: ubuntu-latest
-    if: failure()
+    if: ${{ !contains(needs.ks-and-repo-test.result, 'success') && contains(needs.ks-and-repo-test.result, 'failure') && !(contains (needs.ks-and-repo-test.result,'cancelled')) }}
     steps:
       - run: |
           curl --request POST \
