@@ -17,8 +17,8 @@ on:
   #     - sanity_check
 
 jobs:
-  ks-and-rego-test:
-    name: ks-and-rego-test
+  ks-and-repo-test:
+    name: ks-and-repo-test
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       BINARY_TESTS: '[ 
