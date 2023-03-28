@@ -22,7 +22,7 @@ jobs:
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       BINARY_TESTS: '[ 
-                        "scan_nsa", 
+                        "scan_nsa-a", 
                         "scan_mitre"
                       ]'
     secrets: inherit
