@@ -1,0 +1,29 @@
+name: test-list
+
+  # Controls when the workflow will run
+on:
+  workflow_dispatch:
+  # Triggers the workflow every 5 minutes
+  schedule:
+    - cron: "*/30 * * * *"
+
+  ks-and-rego-test:
+    uses: .github/workflows/sanity-check.yaml
+    with:
+      BINARY_TESTS: '[  "scan_nsa", 
+                        "scan_mitre"
+                      ]'
+    secrets: inherit
+
+  better-up-time:
+    name: better-up-time
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - run: |
+
+curl --request POST \
+  --url https://betteruptime.com/api/v2/incidents \
+  --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
+  --header 'Content-Type: application/json' \
+  --data '{"summary": "Test incident","sms": "true", "email": "true", "requester_email": "borisv@armosec.io", "description": "No need to worry, everything is fine, this is just testing the great Better Uptime API."}'
