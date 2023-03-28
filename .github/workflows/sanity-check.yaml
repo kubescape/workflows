@@ -26,7 +26,7 @@ on:
                       "scan_customer_configuration", 
                       "host_scanner"
                     ]'
-
+jobs:
   wf-preparation:
     name: secret-validator
     runs-on: ubuntu-latest

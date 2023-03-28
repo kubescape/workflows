@@ -6,7 +6,7 @@ on:
   # Triggers the workflow every 5 minutes
   schedule:
     - cron: "*/30 * * * *"
-
+jobs:
   ks-and-rego-test:
     uses: .github/workflows/sanity-check.yaml
     with:
