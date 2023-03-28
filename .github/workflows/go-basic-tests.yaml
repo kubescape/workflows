@@ -65,8 +65,6 @@ jobs:
   #         fi
 
   Environment-Test:
-    permissions:
-      security-events: write 
     name: Create cross-platform build
     # needs: [ Setup-Environment ]
     runs-on: ubuntu-20.04 #${{ matrix.os }}
@@ -97,7 +95,7 @@ jobs:
         uses: github/codeql-action/init@v2
         with:
           languages: go
-          
+
       - name: Autobuild
         uses: github/codeql-action/autobuild@v2
 

@@ -40,6 +40,7 @@ jobs:
   test:
     permissions:
       pull-requests: write
+      security-events: write 
     uses: ./.github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: ${{ inputs.GO_VERSION }}
