@@ -10,7 +10,7 @@ on:
 jobs:
   ks-and-rego-test:
     name: ks-and-rego-test
-    uses: kubescape/workflows/.github/workflows/sanity-check.yaml
+    uses: kubescape/workflows/.github/workflows/sanity-check.yaml@sanity_check
     with:
       BINARY_TESTS: '[ "scan_nsa", 
                         "scan_mitre"
