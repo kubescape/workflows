@@ -6,11 +6,13 @@ on:
   # Triggers the workflow every 5 minutes
   schedule:
     - cron: "*/30 * * * *"
+
 jobs:
   ks-and-rego-test:
-    uses: ./.github/workflows/sanity-check.yaml@sanity_check
+    name: ks-and-rego-test
+    uses: kubescape/workflows/.github/workflows/sanity-check.yaml
     with:
-      BINARY_TESTS: '[  "scan_nsa", 
+      BINARY_TESTS: '[ "scan_nsa", 
                         "scan_mitre"
                       ]'
     secrets: inherit
