@@ -7,6 +7,7 @@ on:
   # schedule:
   #   - cron: "*/30 * * * *"
 
+
 jobs:
   ks-and-rego-test:
     name: ks-and-rego-test
