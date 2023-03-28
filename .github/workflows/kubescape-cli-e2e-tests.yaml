@@ -83,7 +83,7 @@ jobs:
       - run: ls -laR
 
       - name: chmod +r
-        run: chmod +r -R ${{steps.download-artifact.outputs.download-path}}/
+        run: chmod 777 -R ${{steps.download-artifact.outputs.download-path}}/
 
       - run: ls -laR
 
