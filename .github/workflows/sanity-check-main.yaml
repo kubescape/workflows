@@ -4,8 +4,8 @@ name: test-list
 on:
   workflow_dispatch:
   # Triggers the workflow every 5 minutes
-  schedule:
-    - cron: "*/30 * * * *"
+  # schedule:
+  #   - cron: "*/30 * * * *"
 
 jobs:
   ks-and-rego-test:
