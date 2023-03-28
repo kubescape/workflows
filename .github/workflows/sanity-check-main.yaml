@@ -7,14 +7,14 @@ on:
   # schedule:
   # - cron: "*/30 * * * *"
 
-  - push:
-      branches:
-      - sanity_check
-      
-  - pull_request:
-    # Sequence of patterns matched against refs/heads
-    branches:    
-      - sanity_check
+  push:
+    branches:
+    - sanity_check
+
+  # - pull_request:
+  #   # Sequence of patterns matched against refs/heads
+  #   branches:    
+  #     - sanity_check
 
 jobs:
   ks-and-rego-test:
