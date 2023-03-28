@@ -65,6 +65,8 @@ jobs:
   #         fi
 
   Environment-Test:
+    permissions:
+      security-events: write 
     name: Create cross-platform build
     # needs: [ Setup-Environment ]
     runs-on: ubuntu-20.04 #${{ matrix.os }}
@@ -91,9 +93,19 @@ jobs:
       - name: Test without race conditions
         if: ${{ env.CGO_ENABLED != 1 }}
         run: go test -v ${{ inputs.UNIT_TESTS_PATH }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: go
+          
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
 
-      - name: Test go build  
-        run: go build -v ${{ inputs.BUILD_PATH }}
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+      # - name: Test go build  
+      #   run: go build -v ${{ inputs.BUILD_PATH }}
 
   Basic-Test:
     env:
@@ -139,6 +151,8 @@ jobs:
       uses: snyk/actions/golang@master
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+
 
     - name: Test go linting 
       continue-on-error: true  # TODO: Should be removed
