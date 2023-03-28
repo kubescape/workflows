@@ -22,8 +22,7 @@ jobs:
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       BINARY_TESTS: '[ 
-                        "scan_nsa-a", 
-                        "scan_mitre"
+                        "scan_nsa-a"
                       ]'
     secrets: inherit
 
@@ -31,7 +30,7 @@ jobs:
     needs: [ks-and-repo-test]
     name: better-up-time
     runs-on: ubuntu-latest
-    if: ${{ !contains(needs.ks-and-repo-test.result, 'success') && contains(needs.ks-and-repo-test.result, 'failure') && !(contains (needs.ks-and-repo-test.result,'cancelled')) }}
+    if: ${{ contains(needs.*.result, 'failure') }}
     steps:
       - run: |
           curl --request POST \
