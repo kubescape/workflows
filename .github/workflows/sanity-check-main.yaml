@@ -22,7 +22,7 @@ jobs:
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       BINARY_TESTS: '[ 
-                        "scan_nsa"
+                        "scan_nsa-L"
                       ]'
     secrets: inherit
 
@@ -30,6 +30,7 @@ jobs:
     needs: [ks-and-repo-test]
     name: better-up-time
     runs-on: ubuntu-latest
+    if: failure()
     # if: ${{ contains(needs.*.result, 'failure') }}
     steps:
       - run: |
