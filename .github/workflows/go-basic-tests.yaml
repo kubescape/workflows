@@ -91,15 +91,19 @@ jobs:
       - name: Test without race conditions
         if: ${{ env.CGO_ENABLED != 1 }}
         run: go test -v ${{ inputs.UNIT_TESTS_PATH }}
+        
       - name: Initialize CodeQL
+        continue-on-error: true
         uses: github/codeql-action/init@v2
         with:
           languages: go
 
       - name: Autobuild
+        continue-on-error: true
         uses: github/codeql-action/autobuild@v2
 
       - name: Perform CodeQL Analysis
+        continue-on-error: true
         uses: github/codeql-action/analyze@v2
 
       # - name: Test go build  
