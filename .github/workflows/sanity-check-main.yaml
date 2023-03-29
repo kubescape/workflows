@@ -30,7 +30,7 @@ jobs:
     needs: [ks-and-repo-test]
     name: better-up-time
     runs-on: ubuntu-latest
-    if: ${{ contains(needs.*.result, 'failure') }}
+    # if: ${{ contains(needs.*.result, 'failure') }}
     steps:
       - run: |
           curl --request POST \
