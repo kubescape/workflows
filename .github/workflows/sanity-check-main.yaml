@@ -1,15 +1,15 @@
-name: test-list
+name: sanity-check-for-BE
 
   # Controls when the workflow will run
 on:
   # workflow_dispatch:
-  # Triggers the workflow every 5 minutes
-  # schedule:
-  # - cron: "*/30 * * * *"
+  # Triggers the workflow every 30 minutes
+  schedule:
+  - cron: "*/30 * * * *"
 
-  push:
-    branches:
-    - sanity_check
+  # push:
+  #   branches:
+  #   - sanity_check
 
   # - pull_request:
   #   # Sequence of patterns matched against refs/heads
@@ -22,7 +22,7 @@ jobs:
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       BINARY_TESTS: '[ 
-                        "scan_nsa-L"
+                        "scan_nsa"
                       ]'
     secrets: inherit
 
