@@ -1,0 +1,32 @@
+name: sanity-check-for-BE
+
+  # Controls when the workflow will run
+on:
+  workflow_dispatch:
+  # Triggers the workflow every 30 minutes
+  schedule:
+  - cron: "*/30 * * * *"
+
+jobs:
+  ks-and-repo-test:
+    name: ks-and-repo-test
+    uses: ./.github/workflows/sanity-check.yaml # @sanity_check
+    with:
+      BINARY_TESTS: '[ 
+                        "scan_nsa"
+                      ]'
+    secrets: inherit
+
+  better-up-time:
+    needs: [ks-and-repo-test]
+    name: better-up-time
+    runs-on: ubuntu-latest
+    if: failure()
+    # if: ${{ contains(needs.*.result, 'failure') }}
+    steps:
+      - run: |
+          curl --request POST \
+            --url https://betteruptime.com/api/v2/incidents \
+            --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
+            --header 'Content-Type: application/json' \
+            --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
