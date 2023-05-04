@@ -35,7 +35,7 @@ on:
 jobs:
   test:
     permissions:
-      pull-requests: write-all
+      pull-requests: write
     uses: ./.github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: ${{ inputs.GO_VERSION }}
@@ -49,7 +49,7 @@ jobs:
   release:
     needs: test
     permissions:
-      pull-requests: write-all
+      pull-requests: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
