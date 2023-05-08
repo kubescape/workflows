@@ -16,13 +16,15 @@ jobs:
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       BINARY_TESTS: '[ 
-                      "scan_nsa-1" 
+                      "scan_nsa-a" 
                     ]' 
-    uses: nick-fields/retry@v2
-    with:
-      timeout_seconds: 10
-      max_attempts: 2
-      retry_on: error
+    steps:
+      - name: Retry
+        uses: nick-fields/retry@v2
+        with:
+          timeout_seconds: 10
+          max_attempts: 2
+          retry_on: error
     secrets: inherit
 
   better-up-time:
