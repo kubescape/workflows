@@ -35,9 +35,9 @@ jobs:
       pull-requests: write
     uses: ./.github/workflows/package-release.yaml
     with:
-      # RELEASE: "v0.0.${{ github.run_number }}"
+      RELEASE: "v1.0.${{ github.run_number }}"
       GO_VERSION: 1.19
-      # IS_DRAFT: true
+      IS_DRAFT: false
       BUILD_PATH: "./testdata/."
       UNIT_TESTS_PATH: "./testdata/."
     secrets: inherit
