@@ -19,10 +19,10 @@ jobs:
                       "scan_nsa-1" 
                     ]' 
     uses: nick-fields/retry@v2
-      with:
-        timeout_seconds: 10
-        max_attempts: 2
-        retry_on: error
+    with:
+      timeout_seconds: 10
+      max_attempts: 2
+      retry_on: error
     secrets: inherit
 
   better-up-time:
