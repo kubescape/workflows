@@ -50,6 +50,7 @@ jobs:
     needs: test
     permissions:
       pull-requests: write
+      actions: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
