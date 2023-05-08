@@ -64,3 +64,4 @@ jobs:
           release_name: Release v1.0.${{ github.run_number }}
           draft: false
           prerelease: false
+          permissions: write_repository, read_repository
