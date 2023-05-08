@@ -1,5 +1,8 @@
 name: Release
 on:
+  push:
+    tags:
+      - 'v*.*.*-rc.*'
   workflow_call:
     inputs:
       GO_VERSION:
@@ -49,18 +52,19 @@ jobs:
   release:
     needs: test
     permissions:
-      id-token: write # This is required for requesting the JWT
       pull-requests: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Create a release
-      id: create_release
-      uses: actions/create-release@v1
-      with:
-        release_name: "Release: ${{ inputs.RELEASE }}"
-        tag_name: ${{ inputs.RELEASE }}
-        draft: ${{ inputs.IS_DRAFT }}
-        prerelease: false
+    - name: Create Release
+        id: create_release
+        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          release_name: Release v1.0.${{ github.run_number }}
+          draft: false
+          prerelease: false
