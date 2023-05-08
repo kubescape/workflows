@@ -49,6 +49,7 @@ jobs:
   release:
     needs: test
     permissions:
+      id-token: write # This is required for requesting the JWT
       pull-requests: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
