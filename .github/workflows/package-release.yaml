@@ -31,6 +31,8 @@ on:
       #   required: false
       #   type: boolean
       #   default: true
+    paths:
+      - '**/RELEASE'
 
 jobs:
   test:
