@@ -49,7 +49,7 @@ jobs:
   release:
     needs: test
     permissions: {
-      issues: write
+      issues: write,
       pull-requests: write
     }
     env:
