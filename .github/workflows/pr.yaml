@@ -32,6 +32,7 @@ jobs:
   validate-package-releaser-file:
     needs: validate-go-basic-tests-file
     permissions:
+      contents: write
       pull-requests: write
     uses: ./.github/workflows/package-release.yaml
     with:
