@@ -49,7 +49,7 @@ jobs:
     permissions:
       actions: none
       checks: none
-      contents: write
+      contents: none
       deployments: none
       issues: none
       packages: none
