@@ -18,17 +18,7 @@ jobs:
       # TEST_MULTI_ENVIRONMENTS: true
     secrets: inherit
 
-  # validate-go-basic-tests-file-single-os:
-  #   permissions:
-  #     pull-requests: write
-  #   uses: ./.github/workflows/go-basic-tests.yaml
-  #   with:
-  #     GO_VERSION: 1.19
-  #     BUILD_PATH: "./testdata/."
-  #     UNIT_TESTS_PATH: "./testdata/."
-  #     TEST_MULTI_ENVIRONMENTS: false
-  #   secrets: inherit
-
+  # Validate release files and release pkg. 
   validate-package-releaser-file:
     needs: validate-go-basic-tests-file
     permissions:
@@ -36,7 +26,7 @@ jobs:
       pull-requests: write
     uses: ./.github/workflows/package-release.yaml
     with:
-      RELEASE: "v1.0.${{ github.run_number }}"
+      RELEASE: "v*.*.${{ github.run_number }}"
       GO_VERSION: 1.19
       IS_DRAFT: false
       BUILD_PATH: "./testdata/."

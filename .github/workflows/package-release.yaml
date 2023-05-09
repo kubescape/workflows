@@ -46,8 +46,6 @@ jobs:
 
   release:
     needs: test
-    # permissions:
-    #   pull-requests: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
@@ -55,11 +53,8 @@ jobs:
       - uses: actions/checkout@v3
       - name: Create Release
         uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e
-        # uses: pipe-cd/actions-gh-release@v2.3.4
         with:
-          # release_file: '**/RELEASE'
-          # token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v1.0.${{ github.run_number }}
-          release_name: Release v1.0.${{ github.run_number }}
+          tag_name: v*.*.${{ github.run_number }}
+          release_name: Release v*.*.${{ github.run_number }}
           draft: false
           prerelease: false
