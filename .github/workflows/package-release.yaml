@@ -48,9 +48,10 @@ jobs:
 
   release:
     needs: test
-    permissions:
+    permissions: {
       issues: write
       pull-requests: write
+    }
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
