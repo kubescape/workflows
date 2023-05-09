@@ -34,8 +34,6 @@ on:
 
 jobs:
   test:
-    permissions:
-      pull-requests: write
     uses: ./.github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: ${{ inputs.GO_VERSION }}
@@ -48,18 +46,20 @@ jobs:
 
   release:
     needs: test
+    # permissions:
+    #   pull-requests: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Create a release
-      id: create_release
-      uses: actions/create-release@v1
-      with:
-        release_name: "Release: ${{ inputs.RELEASE }}"
-        tag_name: ${{ inputs.RELEASE }}
-        draft: ${{ inputs.IS_DRAFT }}
-        prerelease: false
+      - uses: actions/checkout@v3
+      - name: Create Release
+        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e
+        # uses: pipe-cd/actions-gh-release@v2.3.4
+        with:
+          # release_file: '**/RELEASE'
+          # token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v1.0.${{ github.run_number }}
+          release_name: Release v1.0.${{ github.run_number }}
+          draft: false
+          prerelease: false
