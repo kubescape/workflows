@@ -31,7 +31,7 @@ on:
                     "scan_with_custom_framework", 
                     "scan_customer_configuration", 
                     "host_scanner",
-                    scan_compliance_score
+                    "scan_compliance_score"
                   ]'
       # CHECKOUT_REPO:
       #   required: false
