@@ -31,11 +31,12 @@ on:
       #   required: false
       #   type: boolean
       #   default: true
+  push:
+    tags:
+      - 'v*.*.*'
 
 jobs:
   test:
-    permissions:
-      pull-requests: write
     uses: ./.github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: ${{ inputs.GO_VERSION }}
@@ -46,20 +47,52 @@ jobs:
       # TEST_MULTI_ENVIRONMENTS: ${{ inputs.TEST_MULTI_ENVIRONMENTS }}
     secrets: inherit
 
-  release:
+  create_release:
     needs: test
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-    - name: Create a release
-      id: create_release
-      uses: actions/create-release@v1
-      with:
-        release_name: "Release: ${{ inputs.RELEASE }}"
-        tag_name: ${{ inputs.RELEASE }}
-        draft: ${{ inputs.IS_DRAFT }}
-        prerelease: false
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1))
+          echo "Latest tag: $latest_tag"
+
+      - name: Extract version
+        id: extract_version
+        run: |
+          version=$(echo $latest_tag | jq -r 'sub("^[^0-9]*"; "")')
+          echo "Version: $version"
+
+      - name: Increase version
+        id: increase_version
+        run: |
+          next_version=$((version + 1))
+          echo "Next version: $next_version"
+      
+      - name: Set tag name
+        id: set_tag_name
+        run: |
+          next_version=$((${{ github.event_name == 'release' }} ? $(echo "${{ github.ref }}" | awk -F'/' '{print $3}') : $(echo "${{ github.ref }}-$(date +%s)" | awk -F'/' '{print $3}')))
+          tag_name=v$(echo "$next_version" | cut -d'.' -f-3)
+          echo "::set-output name=tag_name::$tag_name"
+        continue-on-error: true
+
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.set_tag_name.outputs.tag_name }}
+          release_name: Release ${{ steps.set_tag_name.outputs.tag_name }}
+          body: |
+            Changes:
+            - First change
+            - Second change
+          draft: false
+          prerelease: false
