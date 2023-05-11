@@ -66,8 +66,8 @@ jobs:
       - name: Determine version bump
         id: version_bump
         run: |
-          tag=${{ steps.latest_tag.outputs.latest_tag }}
-          commit_range="${tag}..HEAD"
+          tag_name=${{ steps.latest_tag.outputs.latest_tag }}
+          commit_range="${tag_name}..HEAD"
           major_bump=$(git diff --name-only $commit_range | grep -E '^major-.*\.md$' | wc -l)
           minor_bump=$(git diff --name-only $commit_range | grep -E '^minor-.*\.md$' | wc -l)
           if [ $major_bump -gt 0 ]; then
@@ -81,16 +81,16 @@ jobs:
       - name: Increment tag version
         id: increment_tag
         run: |
-          tag=${{ steps.latest_tag.outputs.latest_tag }}
+          tag_name=${{ steps.latest_tag.outputs.latest_tag }}
           bump_type=${{ steps.version_bump.outputs.bump_type }}
           if [ $bump_type == "major" ]; then
-            tag=$(echo $tag | awk -F. '{$1++;$2=0;$3=0;print $0}')
+            tag_name=$(echo $tag_name | awk -F. '{$1++;$2=0;$3=0;print $0}')
           elif [ $bump_type == "minor" ]; then
-            tag=$(echo $tag | awk -F. '{$2++;$3=0;print $0}')
+            tag_name=$(echo $tag_name | awk -F. '{$2++;$3=0;print $0}')
           else
-            tag=$(echo $tag | awk -F. '{$3++;print $0}')
+            tag_name=$(echo $tag_name | awk -F. '{$3++;print $0}')
           fi
-          echo "{name}={$tag}" >> $GITHUB_OUTPUT
+          echo "{name}={$tag_name}" >> $GITHUB_OUTPUT
 
       # - name: Extract version
       #   id: extract_version
