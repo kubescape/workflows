@@ -26,7 +26,7 @@ jobs:
       pull-requests: write
     uses: ./.github/workflows/package-release.yaml
     with:
-      RELEASE: "${{ github.ref }}"
+      RELEASE: "v1.0.${{ github.run_number }}"
       GO_VERSION: 1.19
       IS_DRAFT: false
       BUILD_PATH: "./testdata/."
