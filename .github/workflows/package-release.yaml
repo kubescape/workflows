@@ -89,10 +89,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.increment_tag.outputs.tag_name }}
-          release_name: Release ${{ steps.increment_tag.outputs.tag_name }}
+          tag_name: ${{ steps.set_tag_name.outputs.tag_name }}
+          release_name: Release ${{ steps.set_tag_name.outputs.tag_name }}
           body: |
-            Release ${{ steps.increment_tag.outputs.tag_name }}
+            Release ${{ steps.set_tag_name.outputs.tag_name }}
             -------------------------------
             Add release notes here.
           draft: false
