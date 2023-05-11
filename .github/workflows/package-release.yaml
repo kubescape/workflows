@@ -33,7 +33,7 @@ on:
       #   default: true
   push:
     tags:
-      - 'v*.*.*'
+      - '*'
 
 jobs:
   test:
@@ -66,15 +66,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
+        uses: actions/checkout@v2
         with:
-          node-version: '14.x'
+          fetch-depth: 0
 
-      - name: Install dependencies
-        run: npm install
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1))
+          echo "Latest tag: $latest_tag"
+
+      - name: Extract version
+        id: extract_version
+        run: |
+          version=$(echo $latest_tag | jq -r 'sub("^[^0-9]*"; "")')
+          echo "Version: $version"
+
+      - name: Increase version
+        id: increase_version
+        run: |
+          next_version=$((version + 1))
+          echo "Next version: $next_version"
+
+      - name: Set tag name
+        id: set_tag_name
+        run: |
+          tag_name=v$next_version
+          echo "::set-output name=tag_name::$tag_name"
+        continue-on-error: true
 
       - name: Create release
         id: create_release
@@ -82,14 +101,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ steps.set_tag_name.outputs.tag_name }}
+          release_name: Release ${{ steps.set_tag_name.outputs.tag_name }}
           body: |
             Changes:
             - First change
             - Second change
           draft: false
           prerelease: false
-
-      - name: Get the release ID
-        run: echo "Release ID - ${{ steps.create_release.outputs.id }}"
