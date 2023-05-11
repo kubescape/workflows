@@ -31,11 +31,13 @@ on:
       #   required: false
       #   type: boolean
       #   default: true
+  # push:
+  #   branches: [ main, master ]
+  #   tags:
+  #     - 'v*.*.*'
 
 jobs:
   test:
-    permissions:
-      pull-requests: write
     uses: ./.github/workflows/go-basic-tests.yaml
     with:
       GO_VERSION: ${{ inputs.GO_VERSION }}
@@ -46,20 +48,28 @@ jobs:
       # TEST_MULTI_ENVIRONMENTS: ${{ inputs.TEST_MULTI_ENVIRONMENTS }}
     secrets: inherit
 
-  release:
+  create_release:
     needs: test
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-    - name: Create a release
-      id: create_release
-      uses: actions/create-release@v1
-      with:
-        release_name: "Release: ${{ inputs.RELEASE }}"
-        tag_name: ${{ inputs.RELEASE }}
-        draft: ${{ inputs.IS_DRAFT }}
-        prerelease: false
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # tag_name: ${{ steps.set_tag_name.outputs.tag_name }}
+          # release_name: Release ${{ steps.set_tag_name.outputs.tag_name }}
+          tag_name: ${{ inputs.RELEASE }}
+          release_name: "Release ${{ inputs.RELEASE }}"
+          body: |
+            Release ${{ inputs.RELEASE }}
+            -------------------------------
+            Add release notes here.
+          draft: false
+          prerelease: false
