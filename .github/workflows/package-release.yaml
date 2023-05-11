@@ -63,71 +63,25 @@ jobs:
           latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1))
           echo "Latest tag: $latest_tag"
 
-      - name: Determine version bump
-        id: version_bump
+      - name: Extract version
+        id: extract_version
         run: |
-          tag_name=${{ steps.latest_tag.outputs.latest_tag }}
-          commit_range="${tag_name}..HEAD"
-          major_bump=$(git diff --name-only $commit_range | grep -E '^major-.*\.md$' | wc -l)
-          minor_bump=$(git diff --name-only $commit_range | grep -E '^minor-.*\.md$' | wc -l)
-          if [ $major_bump -gt 0 ]; then
-            echo "{name}={$bump_type} major" >> $GITHUB_OUTPUT
-          elif [ $minor_bump -gt 0 ]; then
-            echo "{name}={$bump_type} minor" >> $GITHUB_OUTPUT
-          else
-            echo "{name}={$bump_type} patch" >> $GITHUB_OUTPUT
-          fi
+          version=$(echo $latest_tag | jq -r 'sub("^[^0-9]*"; "")')
+          echo "Version: $version"
 
-      - name: Increment tag version
-        id: increment_tag
+      - name: Increase version
+        id: increase_version
         run: |
-          tag_name=${{ steps.latest_tag.outputs.latest_tag }}
-          bump_type=${{ steps.version_bump.outputs.bump_type }}
-          if [ $bump_type == "major" ]; then
-            tag_name=$(echo $tag_name | awk -F. '{$1++;$2=0;$3=0;print $0}')
-          elif [ $bump_type == "minor" ]; then
-            tag_name=$(echo $tag_name | awk -F. '{$2++;$3=0;print $0}')
-          else
-            tag_name=$(echo $tag_name | awk -F. '{$3++;print $0}')
-          fi
-          echo "{name}={$tag_name}" >> $GITHUB_OUTPUT
-
-      # - name: Extract version
-      #   id: extract_version
-      #   run: |
-      #     version=$(echo $latest_tag | jq -r 'sub("^[^0-9]*"; "")')
-      #     echo "Version: $version"
-
-      # - name: Increase version
-      #   id: increase_version
-      #   run: |
-      #     next_version=$((version + 1))
-      #     echo "Next version: $next_version"
+          next_version=$((version + 1))
+          echo "Next version: $next_version"
       
-      # - name: Set tag name
-      #   id: set_tag_name
-      #   run: |
-      #     next_version=$((${{ github.event_name == 'release' }} ? $(echo "${{ github.ref }}" | awk -F'/' '{print $3}') : $(echo "${{ github.ref }}-$(date +%s)" | awk -F'/' '{print $3}')))
-      #     tag_name=v$(echo "$next_version" | cut -d'.' -f-3)
-      #     echo "{name}={$tag_name}" >> $GITHUB_OUTPUT
-      #   continue-on-error: true
-
-      # - name: Set tag name
-      #   id: set_tag_name
-      #   run: |
-      #     # Get the latest tag name in the repository
-      #     last_tag=$(git describe --tags --abbrev=0)
-      #     # Extract the major, minor, and patch version numbers from the latest tag
-      #     major=$(echo "$last_tag" | cut -d'.' -f1 | sed 's/v//')
-      #     minor=$(echo "$last_tag" | cut -d'.' -f2)
-      #     patch=$(echo "$last_tag" | cut -d'.' -f3)
-      #     # Increment the patch version number
-      #     next_patch=$(($patch + 1))
-      #     # Set the new tag name with the incremented patch version number
-      #     tag_name="v$major.$minor.$next_patch"
-      #     # Set the tag_name output variable
-      #     echo "{name}={$tag_name}" >> $GITHUB_OUTPUT
-      #   continue-on-error: true
+      - name: Set tag name
+        id: set_tag_name
+        run: |
+          next_version=$((${{ github.event_name == 'release' }} ? $(echo "${{ github.ref }}" | awk -F'/' '{print $3}') : $(echo "${{ github.ref }}-$(date +%s)" | awk -F'/' '{print $3}')))
+          tag_name=v$(echo "$next_version" | cut -d'.' -f-3)
+          echo "{name}={$tag_name}" >> $GITHUB_OUTPUT
+        continue-on-error: true
 
       - name: Create release
         id: create_release
