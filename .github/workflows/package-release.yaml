@@ -31,9 +31,9 @@ on:
       #   required: false
       #   type: boolean
       #   default: true
-  # push:
-  #   tags:
-  #     - 'v*.*.*-rc.*'
+  push:
+    tags:
+      - 'v*.*.*'
 
 jobs:
   test:
@@ -47,24 +47,49 @@ jobs:
       # TEST_MULTI_ENVIRONMENTS: ${{ inputs.TEST_MULTI_ENVIRONMENTS }}
     secrets: inherit
 
-  release:
-    needs: test
-    # outputs:
-    #   NEW_TAG: ${{ steps.tag-calculator.outputs.NEW_TAG }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # release:
+  #   needs: test
+  #   env:
+  #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Create Release
+  #       uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e
+  #       with:
+  #         tag_name: ${{ steps.tag-calculator.outputs.NEW_TAG }}
+  #         release_name: Release ${{ steps.tag-calculator.outputs.NEW_TAG }}
+  #         draft: false
+  #         prerelease: false
+
+  create_release:
     runs-on: ubuntu-latest
     steps:
-      # - id: tag-calculator
-      #   uses: kubescape/workflows/.github/actions/tag-action@main
-      #   with: 
-      #     ORIGINAL_TAG: ${{ inputs.TAG }}
-      #     SUB_STRING: "-rc"
-      - uses: actions/checkout@v3
-      - name: Create Release
-        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14.x'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
+          body: |
+            Changes:
+            - First change
+            - Second change
           draft: false
           prerelease: false
+
+      - name: Get the release ID
+        run: echo "Release ID - ${{ steps.create_release.outputs.id }}"
