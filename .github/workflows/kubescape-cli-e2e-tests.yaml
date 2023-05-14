@@ -33,10 +33,6 @@ on:
                     "host_scanner",
                     "scan_compliance_score"
                   ]'
-      # CHECKOUT_REPO:
-      #   required: false
-      #   type: string
-      #   default: kubescape/kubescape
 
 jobs:
   wf-preparation:

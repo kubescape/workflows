@@ -2,7 +2,7 @@ name: pr-checks
 
 on:
   pull_request:
-    types: [ edited, opened, synchronize, reopened ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
     paths-ignore:
       - '**.md' ### Ignore running when .md files change
 
