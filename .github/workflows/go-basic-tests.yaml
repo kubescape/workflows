@@ -192,4 +192,3 @@ jobs:
           - Unit test: ${{ steps.unit-test.outcome }}
           - Go linting: ${{ steps.linting.outcome }}
         reactions: 'eyes'
-
