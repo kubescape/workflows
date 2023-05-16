@@ -30,13 +30,9 @@ on:
                     "scan_with_exception_to_backend", 
                     "scan_with_custom_framework", 
                     "scan_customer_configuration", 
-                    "host_scanner"
+                    "host_scanner",
+                    "scan_compliance_score"
                   ]'
-      # CHECKOUT_REPO:
-      #   required: false
-      #   type: string
-      #   default: kubescape/kubescape
-
 jobs:
   wf-preparation:
     name: secret-validator
@@ -155,4 +151,3 @@ jobs:
         if: always() # always run even if the previous step fails
         with:
           report_paths: '**/results_xml_format/**.xml'
-          commit: ${{github.event.workflow_run.head_sha}}
