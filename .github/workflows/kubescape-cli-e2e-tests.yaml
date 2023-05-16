@@ -33,14 +33,13 @@ on:
                     "host_scanner",
                     "scan_compliance_score"
                   ]'
-
 jobs:
   wf-preparation:
     name: secret-validator
     runs-on: ubuntu-latest
     outputs:
       TEST_NAMES: ${{ steps.export_tests_to_env.outputs.TEST_NAMES }}
-      is-secret-set: ${{ steps.check-secret-set.outputs.is-secret-set }}
+      # is-secret-set: ${{ steps.check-secret-set.outputs.is-secret-set }}
     steps:
       - name: check if the necessary secrets are set in github secrets
         id: check-secret-set
@@ -52,6 +51,11 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
           REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
           REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+
+        # run: "echo \"is-secret-set=${{ env.CUSTOMER != '' && \n                        env.USERNAME != '' &&\n                        env.PASSWORD != '' &&\n                        env.CLIENT_ID != '' &&\n                        env.SECRET_KEY != '' &&\n                        env.REGISTRY_USERNAME != '' &&\n                        env.REGISTRY_PASSWORD != ''\n                      }}\" >> $GITHUB_OUTPUT\n"
+        # "is-secret-set" validatin (and var) is commented because we add the secret validator function down here.
+        # We commented it out because we revised the secret validation process. We want the pipeline to fail if even one of the secrets is not set.
+        
         run: |
               env_vars=("CUSTOMER" "USERNAME" "PASSWORD" "CLIENT_ID" "SECRET_KEY" "REGISTRY_USERNAME" "REGISTRY_PASSWORD")
               
@@ -79,7 +83,9 @@ jobs:
       matrix:
         TEST: ${{ fromJson(needs.wf-preparation.outputs.TEST_NAMES) }}
     needs: [wf-preparation]
-    if: ${{ (needs.wf-preparation.outputs.is-secret-set == 'true') && (always() && contains(needs.*.result, 'success') && !(contains(needs.*.result, 'failure')) && !(contains(needs.*.result, 'cancelled'))) }}
+    # Down here we have the previous if statement that contains the "is-secret-set" validation.
+    # if: ${{ (needs.wf-preparation.outputs.is-secret-set == 'true') && (always() && contains(needs.*.result, 'success') && !(contains(needs.*.result, 'failure')) && !(contains(needs.*.result, 'cancelled'))) }}
+    if: ${{ (always() && contains(needs.*.result, 'success') && !(contains(needs.*.result, 'failure')) && !(contains(needs.*.result, 'cancelled'))) }}
     runs-on: ubuntu-latest # This cannot change
     steps:
 
@@ -145,4 +151,3 @@ jobs:
         if: always() # always run even if the previous step fails
         with:
           report_paths: '**/results_xml_format/**.xml'
-          commit: ${{github.event.workflow_run.head_sha}}
