@@ -151,3 +151,4 @@ jobs:
         if: always() # always run even if the previous step fails
         with:
           report_paths: '**/results_xml_format/**.xml'
+          commit: ${{github.event.workflow_run.head_sha}}
