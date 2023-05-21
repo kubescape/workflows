@@ -16,15 +16,8 @@ jobs:
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       BINARY_TESTS: '[ 
-                      "scan_nsa-a" 
-                    ]' 
-    steps:
-      - name: Retry
-        uses: nick-fields/retry@v2
-        with:
-          timeout_seconds: 10
-          max_attempts: 2
-          retry_on: error
+                        "scan_nsa-1"
+                      ]'
     secrets: inherit
 
   better-up-time:
@@ -33,10 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     if: failure()
     # if: ${{ contains(needs.*.result, 'failure') }}
-    steps:
-      - run: |
-          curl --request POST \
-            --url https://betteruptime.com/api/v2/incidents \
-            --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
-            --header 'Content-Type: application/json' \
-            --data '{"summary": "TEST incident","sms": "false", "email": "true", "call": "false", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
+    echo "test fail"
+    # steps:
+    #   - run: |
+    #       curl --request POST \
+    #         --url https://betteruptime.com/api/v2/incidents \
+    #         --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
+    #         --header 'Content-Type: application/json' \
+    #         --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
