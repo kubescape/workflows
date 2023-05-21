@@ -20,17 +20,16 @@ jobs:
                       ]'
     secrets: inherit
 
-  better-up-time:
-    needs: [ks-and-repo-test]
-    name: better-up-time
-    runs-on: ubuntu-latest
-    if: failure()
-    # if: ${{ contains(needs.*.result, 'failure') }}
-     steps:
-          run: echo "test failed"
-    #   - run: |
-    #       curl --request POST \
-    #         --url https://betteruptime.com/api/v2/incidents \
-    #         --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
-    #         --header 'Content-Type: application/json' \
-    #         --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
+  # better-up-time:
+  #   needs: [ks-and-repo-test]
+  #   name: better-up-time
+  #   runs-on: ubuntu-latest
+  #   if: failure()
+  #   if: ${{ contains(needs.*.result, 'failure') }}
+  #   steps:
+  #     - run: |
+  #         curl --request POST \
+  #           --url https://betteruptime.com/api/v2/incidents \
+  #           --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
+  #           --header 'Content-Type: application/json' \
+  #           --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
