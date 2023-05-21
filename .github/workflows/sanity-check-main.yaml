@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     if: failure()
     # if: ${{ contains(needs.*.result, 'failure') }}
-    echo "test fail"
+    run: echo "test failed"
     # steps:
     #   - run: |
     #       curl --request POST \
