@@ -3,7 +3,7 @@ name: reran-test-untill-fix
 on:
   workflow_dispatch:
   workflow_run:
-    workflows: ["./.github/workflows/sanity-check-main.yaml"]
+    workflows: ["sanity-check-for-BE"]
     types:
       - completed
     schedule:
@@ -15,6 +15,6 @@ jobs:
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       BINARY_TESTS: '[ 
-                        "scan_nsa-a"
+                        "scan_nsa"
                       ]'
     secrets: inherit
