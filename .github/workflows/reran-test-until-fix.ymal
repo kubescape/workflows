@@ -1,0 +1,24 @@
+name: reran-test-untill-fix
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["./.github/workflows/sanity-check-for-BE"]
+    types:
+      - completed
+    schedule:
+    - cron: "*/4 * * * *"
+
+jobs:
+  ks-and-repo-reran-test:
+    name: ks-and-repo-reran-test
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - name: Run ks-and-repo-reran-test
+        uses: ./.github/workflows/sanity-check.yaml # @sanity_check
+        with:
+          BINARY_TESTS: '[ 
+                            "scan_nsa"
+                          ]'
+        secrets: inherit
