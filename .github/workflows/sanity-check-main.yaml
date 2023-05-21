@@ -26,9 +26,9 @@ jobs:
     name: better-up-time
     runs-on: ubuntu-latest
     if: failure()
-    if: ${{ contains(needs.*.result, 'failure') }}
+    #if: ${{ contains(needs.*.result, 'failure') }}
     steps:
-      run: echo "test failed"
+      - run: echo "test failed"
       # - run: |
       #     curl --request POST \
       #       --url https://betteruptime.com/api/v2/incidents \
