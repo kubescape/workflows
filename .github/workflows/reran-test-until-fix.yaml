@@ -2,19 +2,20 @@ name: reran-test-untill-fix
 
 on:
   workflow_call:
-  workflow_dispatch:
-  workflow_run:
-    workflows: ["sanity-check-for-BE"]
-    types:
-      - completed
+  # workflow_run:
+  #   workflows: ["sanity-check-for-BE"]
+  #   types:
+  #     - completed
   #   schedule:
   #   - cron: "*/4 * * * *"
 
 
 jobs:
-  call-sanity-check:
+  rerun-check:
+    needs: [ks-and-repo-test]
+    name: rerun-check
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    if: failure()
     steps:
       - name: reran-test-untill-fix
         uses: ./.github/workflows/sanity-check.yaml 
