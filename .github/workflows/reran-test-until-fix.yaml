@@ -2,16 +2,32 @@ name: reran-test-untill-fix
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["system-sanity-check"]
-    types:
-      - completed
-    schedule:
-    - cron: "*/4 * * * *"
+  # workflow_run:
+  #   workflows: ["system-sanity-check"]
+  #   types:
+  #     - completed
+  #   schedule:
+  #   - cron: "*/4 * * * *"
+
 
 jobs:
-  ks-and-repo-test:
-    name: ks-and-repo-test-reran
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+  call-sanity-check:
+    uses: ./.github/workflows/sanity-check-main.yaml
+    secrets: inherit
+    name: ks-and-repo-reran-test
+    runs-on: ubuntu-latest
+    if: failure()
     steps:
-      - run: echo "reran the test"
+      - name: Run ks-and-repo-reran-test
+        uses: ./.github/workflows/sanity-check.yaml # @sanity_check
+        with:
+          BINARY_TESTS: '[ 
+                            "scan_nsa"
+                          ]'
+        secrets: inherit
+# jobs:
+#   ks-and-repo-test:
+#     name: ks-and-repo-test-reran
+#     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+#     steps:
+#       - run: echo "reran the test"
