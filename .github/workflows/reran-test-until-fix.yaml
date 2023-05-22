@@ -1,6 +1,7 @@
 name: reran-test-untill-fix
 
 on:
+  workflow_call:
   workflow_dispatch:
   workflow_run:
     workflows: ["sanity-check-for-BE"]
