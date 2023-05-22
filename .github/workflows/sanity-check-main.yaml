@@ -35,6 +35,6 @@ jobs:
       #       --header 'Content-Type: application/json' \
       #       --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
       - name: Call test reran workflow
         uses: ./.github/workflows/reran-test-until-fix.yaml
