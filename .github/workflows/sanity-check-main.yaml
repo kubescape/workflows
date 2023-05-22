@@ -2,8 +2,7 @@ name: sanity-check-for-BE
 
   # Controls when the workflow will run
 on:
-  workflow_call:
-  # workflow_dispatch:
+  workflow_dispatch:
   # # Triggers the workflow every 30 minutes
   # schedule:
   # - cron: "*/30 * * * *"
@@ -35,3 +34,5 @@ jobs:
       #       --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
       #       --header 'Content-Type: application/json' \
       #       --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
+      - name: Call another workflow
+        uses: ./.github/workflows/reran-test-until-fix.yaml
