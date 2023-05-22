@@ -12,5 +12,6 @@ on:
 jobs:
   ks-and-repo-test:
     name: ks-and-repo-test-reran
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
       - run: echo "reran the test"
