@@ -2,7 +2,7 @@ name: reran-test-untill-fix
 
 on:
   workflow_dispatch:
-  # workflow_run:
+  workflow_run:
     workflows: ["sanity-check-for-BE"]
     types:
       - completed
@@ -12,11 +12,10 @@ on:
 
 jobs:
   call-sanity-check:
-    name: ks-and-repo-reran-test
     runs-on: ubuntu-latest
-    if: failure()
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
-      - name: Run ks-and-repo-reran-test
+      - name: reran-test-untill-fix
         uses: ./.github/workflows/sanity-check.yaml 
         with:
           BINARY_TESTS: '[ 
