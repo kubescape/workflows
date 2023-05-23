@@ -28,17 +28,16 @@ jobs:
     #if: ${{ contains(needs.*.result, 'failure') }}
     steps:
       - run: echo "test failed"
-      - uses: ./.github/workflows/sreran-test-untill-fix.yaml
       # - run: |
       #     curl --request POST \
       #       --url https://betteruptime.com/api/v2/incidents \
       #       --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
       #       --header 'Content-Type: application/json' \
       #       --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
-      # - name: Checkout repo
-      #   uses: actions/checkout@v3
-      #   with:
-      #     repository: kubescape/workflows
-      #     path: .
-      # - name: Call test reran workflow
-      #   uses: ./.github/workflows/reran-test-until-fix.yaml
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          repository: kubescape/workflows
+          path: .
+      - name: Call test reran workflow
+        uses: ./.github/workflows/sreran-test-untill-fix.yaml
