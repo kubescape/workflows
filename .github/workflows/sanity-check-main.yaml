@@ -7,7 +7,7 @@ on:
   # schedule:
   # - cron: "*/30 * * * *"
 env:
-    FIX_FLOW: "false"
+  FIX_FLOW: false
   push:
     branches:
     - sanity_check
@@ -26,7 +26,7 @@ jobs:
     needs: [ks-and-repo-test]
     if: failure()
     env:
-      FIX_FLOW: "true"
+      FIX_FLOW: true
     steps:
       - run: echo ${{env.FIX_FLOW}}
     
