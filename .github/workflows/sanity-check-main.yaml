@@ -24,6 +24,7 @@ jobs:
     secrets: inherit
 
   set-env:
+    name: set-env
     needs: [ks-and-repo-test]
     if: failure()
     env:
