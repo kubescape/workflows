@@ -6,12 +6,12 @@ on:
   # # Triggers the workflow every 30 minutes
   # schedule:
   # - cron: "*/30 * * * *"
-env:
-  FIX_FLOW: false
-  
   push:
     branches:
     - sanity_check
+
+env:
+  FIX_FLOW: false
 
 jobs:
   ks-and-repo-test:
