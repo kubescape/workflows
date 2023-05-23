@@ -8,6 +8,7 @@ on:
   # - cron: "*/30 * * * *"
 env:
   FIX_FLOW: false
+  
   push:
     branches:
     - sanity_check
