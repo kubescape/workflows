@@ -36,6 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
-      - name: Check out code
+      - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          repository: kubescape/workflows
+          path: .
       - run: echo "sanity-check-for-BE failed!"
