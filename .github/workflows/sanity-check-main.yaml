@@ -10,10 +10,15 @@ on:
     branches:
     - sanity_check
 
-env:
-  FIX_FLOW: false
-
 jobs:
+  set-env-first:
+    name: set-env-first
+    runs-on: ubuntu-latest
+    env:
+      FIX_FLOW: false
+    steps:
+      - run: echo ${{env.FIX_FLOW}}
+
   ks-and-repo-test:
     name: ks-and-repo-test
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
