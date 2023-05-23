@@ -40,4 +40,4 @@ jobs:
           repository: kubescape/workflows
           path: .
       - name: Call test reran workflow
-        uses: ./.github/workflows/sreran-test-untill-fix.yaml
+        uses: ./.github/workflows/reran-test-untill-fix.yaml
