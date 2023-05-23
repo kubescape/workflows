@@ -28,6 +28,7 @@ jobs:
     #if: ${{ contains(needs.*.result, 'failure') }}
     steps:
       - run: echo "test failed"
+        uses: ./.github/workflows/sreran-test-untill-fix.yaml
       # - run: |
       #     curl --request POST \
       #       --url https://betteruptime.com/api/v2/incidents \
