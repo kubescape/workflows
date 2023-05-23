@@ -26,6 +26,7 @@ jobs:
   set-env:
     name: set-env
     needs: [ks-and-repo-test]
+    runs-on: ubuntu-latest
     if: failure()
     env:
       FIX_FLOW: true
