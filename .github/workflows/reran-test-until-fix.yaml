@@ -1,32 +1,32 @@
 name: reran-test-untill-fix
 on:
   workflow_call:
-    inputs:
-      GO_VERSION:
-        required: true
-        type: string
-      GO111MODULE:
-        required: false
-        type: string
-      CGO_ENABLED:
-        required: false
-        type: number
-        default: 1
-      RELEASE:
-        required: true
-        type: string
-      IS_DRAFT:
-        required: false
-        type: boolean
-        default: false
-      BUILD_PATH:
-        required: false
-        type: string
-        default: "./..."
-      UNIT_TESTS_PATH:
-        required: false
-        type: string
-        default: "./..."
+    # inputs:
+    #   GO_VERSION:
+    #     required: true
+    #     type: string
+    #   GO111MODULE:
+    #     required: false
+    #     type: string
+    #   CGO_ENABLED:
+    #     required: false
+    #     type: number
+    #     default: 1
+    #   RELEASE:
+    #     required: true
+    #     type: string
+    #   IS_DRAFT:
+    #     required: false
+    #     type: boolean
+    #     default: false
+    #   BUILD_PATH:
+    #     required: false
+    #     type: string
+    #     default: "./..."
+    #   UNIT_TESTS_PATH:
+    #     required: false
+    #     type: string
+    #     default: "./..."
       # TEST_MULTI_ENVIRONMENTS:
       #   required: false
       #   type: boolean
