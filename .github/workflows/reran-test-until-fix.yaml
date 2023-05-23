@@ -32,7 +32,7 @@ on:
       #   type: boolean
       #   default: true
 jobs:
-  build:
+  check-while-fix:
     runs-on: ubuntu-latest
     #if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
@@ -42,3 +42,13 @@ jobs:
           repository: kubescape/workflows
           path: .
       - run: echo "sanity-check-for-BE failed!"
+      - run: echo "${{env.FIX_FLOW}}-fix flow"
+
+  # ks-and-repo-test:
+  #   name: ks-and-repo-test
+  #   uses: ./.github/workflows/sanity-check.yaml # @sanity_check
+  #   with:
+  #     BINARY_TESTS: '[ 
+  #                       "scan_nsa-a"
+  #                     ]'
+  #   secrets: inherit

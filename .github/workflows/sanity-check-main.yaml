@@ -6,6 +6,8 @@ on:
   # # Triggers the workflow every 30 minutes
   # schedule:
   # - cron: "*/30 * * * *"
+env:
+    FIX_FLOW: "false"
   push:
     branches:
     - sanity_check
@@ -19,6 +21,15 @@ jobs:
                         "scan_nsa-a"
                       ]'
     secrets: inherit
+
+  set-env:
+    needs: [ks-and-repo-test]
+    if: failure()
+    env:
+      FIX_FLOW: "true"
+    steps:
+      - run: echo ${{env.FIX_FLOW}}
+    
 
   better-up-time:
     needs: [ks-and-repo-test]
@@ -34,13 +45,6 @@ jobs:
       #       --header "Authorization: Bearer ${{ secrets.BETTER_UPTIME_TOKEN }}" \
       #       --header 'Content-Type: application/json' \
       #       --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
-      # - name: Checkout repo
-      #   uses: actions/checkout@v3
-      #   with:
-      #     repository: kubescape/workflows
-      #     path: .
-      # - name: Call test reran workflow
-      #   uses: ./.github/workflows/reran-test-until-fix.yaml
 
   call-reran:
     needs: [ks-and-repo-test]
