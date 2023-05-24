@@ -10,34 +10,20 @@ on:
     branches:
     - sanity_check
 
-jobs:
-  set-env-first:
-    name: set-env-first
-    runs-on: ubuntu-latest
-    env:
-      FIX_FLOW: false
-    steps:
-      - run: echo ${{env.FIX_FLOW}}
+concurrency:
+  group: ${{ github.head_ref }}
+  cancel-in-progress: false
 
+jobs:
   ks-and-repo-test:
     name: ks-and-repo-test
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
+      IF_FAILED: false
       BINARY_TESTS: '[ 
                         "scan_nsa-a"
                       ]'
     secrets: inherit
-
-  set-env:
-    name: set-env
-    needs: [ks-and-repo-test]
-    runs-on: ubuntu-latest
-    if: failure()
-    env:
-      FIX_FLOW: true
-    steps:
-      - run: echo ${{env.FIX_FLOW}}
-    
 
   better-up-time:
     needs: [ks-and-repo-test]
@@ -57,6 +43,11 @@ jobs:
   call-reran:
     needs: [ks-and-repo-test]
     if: failure()
-    name: ks-and-repo-test
-    uses: ./.github/workflows/reran-test-until-fix.yaml
+    name: repeated-test
+    uses: ./.github/workflows/sanity-check.yaml # @sanity_check
+    with:
+      IF_FAILED: true
+      BINARY_TESTS: '[ 
+                        "scan_nsa"
+                      ]'
     secrets: inherit
