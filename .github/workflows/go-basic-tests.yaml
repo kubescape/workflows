@@ -86,11 +86,11 @@ jobs:
 
       - name: Test race conditions
         if: ${{ env.CGO_ENABLED == 1 }}
-        run: go test -v -race ${{ inputs.UNIT_TESTS_PATH }}
+        run: go test -v -race $(go list ${{ inputs.UNIT_TESTS_PATH }} | grep -v /e2e)
 
       - name: Test without race conditions
         if: ${{ env.CGO_ENABLED != 1 }}
-        run: go test -v ${{ inputs.UNIT_TESTS_PATH }}
+        run: go test -v $(go list ${{ inputs.UNIT_TESTS_PATH }} | grep -v /e2e)
         
       - name: Initialize CodeQL
         continue-on-error: true
@@ -167,7 +167,7 @@ jobs:
       
     - name: Test coverage
       id: unit-test
-      run: go test -v ${{ inputs.UNIT_TESTS_PATH }} -covermode=count -coverprofile=coverage.out
+      run: go test -v $(go list ${{ inputs.UNIT_TESTS_PATH }} | grep -v /e2e) -covermode=count -coverprofile=coverage.out
 
     - name: Convert coverage count to lcov format
       uses: jandelgado/gcov2lcov-action@v1
