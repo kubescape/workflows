@@ -139,14 +139,12 @@ jobs:
                 --logger DEBUG \
                 --kwargs helm_branch=release \
                 deactivate
-              echo "failure()" 
-          
-              exit_code=$?
-              echo "exit_code=$?"
-              echo "$exit_code" 
-              if [ $exit_code -eq 0 ]; then
+
+              echo $?
+              if [ $? -eq 0 ]; then
                 break
               fi
+              sleep 10
             done            
 
         - name: Test Report
