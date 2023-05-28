@@ -130,8 +130,8 @@ jobs:
             echo " ${{ matrix.TEST }} " >/tmp/testhistory
             cat /tmp/testhistory
             source systests_python_env/bin/activate
-
-            while true; do
+            echo "exit code= $exit_code"
+            while [ $exit_code != 0]; do
               python3 systest-cli.py \
                 -t ${{ matrix.TEST }} \
                 -b production \
