@@ -140,7 +140,6 @@ jobs:
                 --kwargs helm_branch=release \
                 deactivate
 
-              echo $?
               if [ $? != 0 ]; then
                 break
               fi
