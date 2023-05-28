@@ -140,7 +140,7 @@ jobs:
                 --kwargs helm_branch=release \
                 deactivate
 
-              if [ $? != 0 ]; then
+              if [ $? = 0 ]; then
                 break
               fi
               sleep 10
