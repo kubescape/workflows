@@ -48,6 +48,6 @@ jobs:
     with:
       IF_FAILED: true
       BINARY_TESTS: '[ 
-                        "scan_nsa-b"
+                        "scan_nsa"
                       ]'
     secrets: inherit

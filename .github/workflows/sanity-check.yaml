@@ -141,7 +141,7 @@ jobs:
                 deactivate
 
               echo $?
-              if [ $? -eq 0 ]; then
+              if [ $? != 0 ]; then
                 break
               fi
               sleep 10
