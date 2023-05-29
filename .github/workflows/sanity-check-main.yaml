@@ -18,15 +18,14 @@ jobs:
   ks-and-repo-test:
     name: ks-and-repo-test
     runs-on: ubuntu-latest
-    steps:
-      - name: Run Sanity Check
-        uses: ./.github/workflows/sanity-check.yaml # @sanity_check
-        with:
-          IF_FAILED: false
-          BINARY_TESTS: '[ 
-                            "scan_nsa-a"
-                          ]'
-        secrets: inherit
+      name: Run Sanity Check
+      uses: ./.github/workflows/sanity-check.yaml # @sanity_check
+      with:
+        IF_FAILED: false
+        BINARY_TESTS: '[ 
+                          "scan_nsa-a"
+                        ]'
+      secrets: inherit
 
   better-up-time:
     needs: [ks-and-repo-test]
