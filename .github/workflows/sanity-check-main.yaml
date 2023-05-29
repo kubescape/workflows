@@ -28,20 +28,6 @@ jobs:
                           ]'
         secrets: inherit
 
-      - name: Retry if Failed
-        uses: nick-fields/retry@v2
-        with:
-          timeout_seconds: 15
-          max_attempts: 2
-          retry_on: error
-          IF_FAILED: false
-          BINARY_TESTS: '[ 
-                            "scan_nsa-a"
-                          ]'
-        secrets: inherit
-
-    
-
   better-up-time:
     needs: [ks-and-repo-test]
     name: better-up-time
