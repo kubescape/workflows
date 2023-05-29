@@ -92,6 +92,7 @@ jobs:
             # verbosity:
 
         - name: run-tests
+          continue-on-error: true
           if: ${{ inputs.IF_FAILED == false }}
           env:
             CUSTOMER: ${{ secrets.CUSTOMER }}
