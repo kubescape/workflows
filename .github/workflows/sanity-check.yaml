@@ -92,7 +92,10 @@ jobs:
             # verbosity:
 
         - name: run-tests
-          continue-on-error: true
+          uses: nick-fields/retry@v2
+          with:
+            timeout_seconds: 10
+            max_attempts: 2
           if: ${{ inputs.IF_FAILED == false }}
           env:
             CUSTOMER: ${{ secrets.CUSTOMER }}
@@ -102,31 +105,18 @@ jobs:
             SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
             REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
             REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-          run: |
+          command: |
             echo "Test history:"
             echo " ${{ matrix.TEST }} " >/tmp/testhistory
             cat /tmp/testhistory
             source systests_python_env/bin/activate
-            max_attempts=2
-            attempt=1
-            while [ $attempt -le $max_attempts ]
-            do
               python3 systest-cli.py \
-              -t ${{ matrix.TEST }} \
-              -b production \
-              -c CyberArmorTests \
-              --logger DEBUG \
-              --kwargs helm_branch=release \
+                -t ${{ matrix.TEST }} \
+                -b production \
+                -c CyberArmorTests \
+                --logger DEBUG \
+                --kwargs helm_branch=release \
               deactivate
-              if [ $? -eq 0 ]; then
-                echo "Test passed"
-                break
-              else
-                echo "Test failed, increment attempt count"
-                attempt=$((attempt + 1))
-                sleep 10
-              fi
-            done
 
         - name: run-tests-repeated
           if: ${{ inputs.IF_FAILED == true }}
