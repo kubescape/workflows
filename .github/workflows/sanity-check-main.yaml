@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   ks-and-repo-test:
-    name: ks-and-repo-test
+  - name: ks-and-repo-test
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
       IF_FAILED: false
@@ -24,6 +24,19 @@ jobs:
                         "scan_nsa-a"
                       ]'
     secrets: inherit
+
+  - name: retry-if-fail
+    uses: nick-fields/retry@v2
+    with:
+      timeout_seconds: 15
+      max_attempts: 2
+      retry_on: error
+      IF_FAILED: false
+      BINARY_TESTS: '[ 
+                        "scan_nsa-a"
+                      ]'
+    secrets: inherit  
+    
 
   better-up-time:
     needs: [ks-and-repo-test]
