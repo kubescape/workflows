@@ -16,16 +16,14 @@ concurrency:
 
 jobs:
   ks-and-repo-test:
-    name: ks-and-repo-test
-    runs-on: ubuntu-latest
-      name: run-sanity-check
-      uses: ./.github/workflows/sanity-check.yaml # @sanity_check
-      with:
-        IF_FAILED: false
-        BINARY_TESTS: '[ 
-                          "scan_nsa-a"
-                        ]'
-      secrets: inherit
+    name: run-sanity-check
+    uses: ./.github/workflows/sanity-check.yaml # @sanity_check
+    with:
+      IF_FAILED: false
+      BINARY_TESTS: '[ 
+                        "scan_nsa-a"
+                      ]'
+    secrets: inherit
 
   better-up-time:
     needs: [ks-and-repo-test]
