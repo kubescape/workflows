@@ -18,7 +18,7 @@ jobs:
   ks-and-repo-test:
     name: ks-and-repo-test
     runs-on: ubuntu-latest
-      name: Run Sanity Check
+      name: run-sanity-check
       uses: ./.github/workflows/sanity-check.yaml # @sanity_check
       with:
         IF_FAILED: false
