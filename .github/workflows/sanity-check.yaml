@@ -103,7 +103,7 @@ jobs:
             SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
             REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
             REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-          ran: |
+          run: |
             echo "Test history:"
             echo " ${{ matrix.TEST }} " >/tmp/testhistory
             cat /tmp/testhistory
@@ -126,7 +126,7 @@ jobs:
             SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
             REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
             REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-          ran: |
+          run: |
             echo "Test retry history:"
             echo " ${{ matrix.TEST }} " >/tmp/testhistory
             cat /tmp/testhistory
