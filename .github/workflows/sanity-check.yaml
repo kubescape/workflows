@@ -1,5 +1,13 @@
 name: system-sanity-check
 
+env:
+  CUSTOMER: ${{ secrets.CUSTOMER }}
+  USERNAME: ${{ secrets.USERNAME }}
+  PASSWORD: ${{ secrets.PASSWORD }}
+  CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
+  SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
+  REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+  REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
   # Controls when the workflow will run
 on:
   # Triggers the workflow every 5 minutes
@@ -30,14 +38,6 @@ on:
                       "host_scanner"
                     ]'
 jobs:
-  env:
-    CUSTOMER: ${{ secrets.CUSTOMER }}
-    USERNAME: ${{ secrets.USERNAME }}
-    PASSWORD: ${{ secrets.PASSWORD }}
-    CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-    SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
-    REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-    REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
   wf-preparation:
     name: secret-validator
     runs-on: ubuntu-latest
