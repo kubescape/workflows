@@ -30,6 +30,14 @@ on:
                       "host_scanner"
                     ]'
 jobs:
+env:
+  CUSTOMER: ${{ secrets.CUSTOMER }}
+  USERNAME: ${{ secrets.USERNAME }}
+  PASSWORD: ${{ secrets.PASSWORD }}
+  CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
+  SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
+  REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+  REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
   wf-preparation:
     name: secret-validator
     runs-on: ubuntu-latest
@@ -39,14 +47,14 @@ jobs:
     steps:
       - name: check if the necessary secrets are set in github secrets
         id: check-secret-set
-        env:
-          CUSTOMER: ${{ secrets.CUSTOMER }}
-          USERNAME: ${{ secrets.USERNAME }}
-          PASSWORD: ${{ secrets.PASSWORD }}
-          CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
-          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        # env:
+        #   CUSTOMER: ${{ secrets.CUSTOMER }}
+        #   USERNAME: ${{ secrets.USERNAME }}
+        #   PASSWORD: ${{ secrets.PASSWORD }}
+        #   CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
+        #   SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
+        #   REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+        #   REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
         run: "echo \"is-secret-set=${{ env.CUSTOMER != '' && \n                        env.USERNAME != '' &&\n                        env.PASSWORD != '' &&\n                        env.CLIENT_ID != '' &&\n                        env.SECRET_KEY != '' &&\n                        env.REGISTRY_USERNAME != '' &&\n                        env.REGISTRY_PASSWORD != ''\n                      }}\" >> $GITHUB_OUTPUT\n"
 
       - id: export_tests_to_env
@@ -95,14 +103,14 @@ jobs:
           continue-on-error: true
           id: StepId1
           if: ${{ inputs.IF_FAILED == false }}
-          env:
-            CUSTOMER: ${{ secrets.CUSTOMER }}
-            USERNAME: ${{ secrets.USERNAME }}
-            PASSWORD: ${{ secrets.PASSWORD }}
-            CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-            SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
-            REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-            REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          # env:
+          #   CUSTOMER: ${{ secrets.CUSTOMER }}
+          #   USERNAME: ${{ secrets.USERNAME }}
+          #   PASSWORD: ${{ secrets.PASSWORD }}
+          #   CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
+          #   SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
+          #   REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          #   REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
           run: |
             echo "Test history:"
             echo " ${{ matrix.TEST }} " >/tmp/testhistory
@@ -119,13 +127,13 @@ jobs:
         - name: retry-test
           if: steps.StepId1.outcome == 'failure'
           env:
-            CUSTOMER: ${{ secrets.CUSTOMER }}
-            USERNAME: ${{ secrets.USERNAME }}
-            PASSWORD: ${{ secrets.PASSWORD }}
-            CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-            SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
-            REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-            REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+            # CUSTOMER: ${{ secrets.CUSTOMER }}
+            # USERNAME: ${{ secrets.USERNAME }}
+            # PASSWORD: ${{ secrets.PASSWORD }}
+            # CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
+            # SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
+            # REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+            # REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
           run: |
             echo "Test retry history:"
             echo " ${{ matrix.TEST }} " >/tmp/testhistory
@@ -141,14 +149,14 @@ jobs:
 
         - name: run-tests-repeated
           if: ${{ inputs.IF_FAILED == true }}
-          env:
-            CUSTOMER: ${{ secrets.CUSTOMER }}
-            USERNAME: ${{ secrets.USERNAME }}
-            PASSWORD: ${{ secrets.PASSWORD }}
-            CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-            SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
-            REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-            REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          # env:
+          #   CUSTOMER: ${{ secrets.CUSTOMER }}
+          #   USERNAME: ${{ secrets.USERNAME }}
+          #   PASSWORD: ${{ secrets.PASSWORD }}
+          #   CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
+          #   SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
+          #   REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          #   REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
           run: |
             echo "Test history repeated:"
             echo " ${{ matrix.TEST }} " >/tmp/testhistory
