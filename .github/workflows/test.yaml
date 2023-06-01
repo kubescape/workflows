@@ -1,8 +1,8 @@
 name: test
 on:
-  push:
-    branches:
-    - sanity_check
+  # push:
+  #   branches:
+  #   - sanity_check
 
 permissions:  
   contents: write 
@@ -17,9 +17,7 @@ jobs:
     - name: Append to CSV
       run: |
         timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-        ls
         echo "$timestamp,Data1,Data2,Data3" >> logs/sanity_logs.csv
-        echo "This works"
 
     - name: Commit changes
       uses: EndBug/add-and-commit@v7
