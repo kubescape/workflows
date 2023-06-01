@@ -13,10 +13,12 @@ jobs:
     - name: Append to CSV
       run: |
         timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-        echo "$timestamp,Data1,Data2,Data3" >> sanity_logs.csv
+        ls
+        echo "$timestamp,Data1,Data2,Data3" >> logs/sanity_logs.csv
+        echo "This works"
 
-    # - name: Commit changes
-    #   uses: EndBug/add-and-commit@v7
-    #   with:
-    #     message: "Update sanily logs with new data"
+    - name: Commit changes
+      uses: EndBug/add-and-commit@v7
+      with:
+        message: "Update sanily logs with new data"
 
