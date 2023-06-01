@@ -3,6 +3,10 @@ on:
   push:
     branches:
     - sanity_check
+
+permissions:  
+  contents: write 
+  actions: read 
 jobs:
   just-for-commit:
     runs-on: ubuntu-latest
