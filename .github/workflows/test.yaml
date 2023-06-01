@@ -1,8 +1,8 @@
 name: test
-on:
-  # push:
-  #   branches:
-  #   - sanity_check
+# on:
+#   push:
+#     branches:
+#     - sanity_check
 
 permissions:  
   contents: write 
