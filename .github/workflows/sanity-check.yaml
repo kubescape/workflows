@@ -115,17 +115,17 @@ jobs:
                   --kwargs helm_branch=release \
                 deactivate
 
-        - name: Append to CSV if pass
-          needs: [run-tests]
-          uses: actions/checkout@v2
-          run: |
-            timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-            echo "$timestamp,pass" >> logs/sanity_logs.csv
+        # - name: Append to CSV if pass
+        #   needs: [run-tests]
+        #   uses: actions/checkout@v2
+        #   run: |
+        #     timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+        #     echo "$timestamp,pass" >> logs/sanity_logs.csv
             
-        - name: Commit changes
-          uses: EndBug/add-and-commit@v7
-          with:
-            message: "Update sanily logs with new data - pass"
+        # - name: Commit changes
+        #   uses: EndBug/add-and-commit@v7
+        #   with:
+        #     message: "Update sanily logs with new data - pass"
     
         - name: run-tests-repeated
           if: ${{ inputs.IF_FAILED == true }}
