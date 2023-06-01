@@ -117,7 +117,7 @@ jobs:
 
         - name: Append to CSV if pass
           needs: [run-tests]
-        - uses: actions/checkout@v2
+          uses: actions/checkout@v2
           run: |
             timestamp=$(date +"%Y-%m-%d %H:%M:%S")
             echo "$timestamp,pass" >> logs/sanity_logs.csv
