@@ -6,9 +6,9 @@ on:
   # # Triggers the workflow every 30 minutes
   # schedule:
   # - cron: "*/30 * * * *"
-  push:
-    branches:
-    - sanity_check
+  # push:
+  #   branches:
+  #   - sanity_check
 
 concurrency:
   group: sanity

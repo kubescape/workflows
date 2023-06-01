@@ -1,0 +1,22 @@
+name: test
+on:
+  push:
+    branches:
+    - sanity_check
+jobs:
+  just-for-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Append to CSV
+      run: |
+        timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+        echo "$timestamp,Data1,Data2,Data3" >> sanity_logs.csv
+
+    # - name: Commit changes
+    #   uses: EndBug/add-and-commit@v7
+    #   with:
+    #     message: "Update sanily logs with new data"
+
