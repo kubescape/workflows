@@ -1,5 +1,8 @@
 name: system-sanity-check
-
+permissions:  
+  contents: write 
+  actions: read
+  
 env:
   CUSTOMER: ${{ secrets.CUSTOMER }}
   USERNAME: ${{ secrets.USERNAME }}
@@ -58,9 +61,6 @@ jobs:
           input: ${{ inputs.BINARY_TESTS }}
 
   run-tests:
-      permissions:  
-      contents: write 
-      actions: read 
       strategy:
         fail-fast: false    
         matrix:
