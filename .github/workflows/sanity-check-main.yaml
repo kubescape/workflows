@@ -16,6 +16,9 @@ concurrency:
 
 jobs:
   ks-and-repo-test:
+    permissions:  
+      contents: write 
+      actions: read
     name: run-sanity-check
     uses: ./.github/workflows/sanity-check.yaml # @sanity_check
     with:
