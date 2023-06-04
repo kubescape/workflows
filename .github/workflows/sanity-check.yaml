@@ -37,9 +37,6 @@ on:
                       "scan_customer_configuration", 
                       "host_scanner"
                     ]'
-permissions:  
-  contents: write 
-  actions: read 
   
 jobs:
   wf-preparation:
@@ -61,6 +58,9 @@ jobs:
           input: ${{ inputs.BINARY_TESTS }}
 
   run-tests:
+  permissions:  
+  contents: write 
+  actions: read 
       strategy:
         fail-fast: false    
         matrix:
