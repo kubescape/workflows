@@ -24,7 +24,7 @@ jobs:
     with:
       IF_FAILED: false
       BINARY_TESTS: '[ 
-                        "scan_nsa"
+                        "scan_nsa-a"
                       ]'
     secrets: inherit
 
@@ -51,6 +51,6 @@ jobs:
     with:
       IF_FAILED: true
       BINARY_TESTS: '[ 
-                        "scan_nsa"
+                        "scan_nsa-b"
                       ]'
     secrets: inherit
