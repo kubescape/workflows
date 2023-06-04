@@ -115,9 +115,9 @@ jobs:
                   --kwargs helm_branch=release \
                 deactivate
 
+        - uses: actions/checkout@v2
         - name: Append to CSV if pass
           needs: [run-tests]
-          uses: actions/checkout@v2
           run: |
             timestamp=$(date +"%Y-%m-%d %H:%M:%S")
             echo "$timestamp,pass" >> logs/sanity_logs.csv
