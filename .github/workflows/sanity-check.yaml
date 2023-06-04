@@ -2,7 +2,7 @@ name: system-sanity-check
 permissions:  
   contents: write 
   actions: read
-  
+
 env:
   CUSTOMER: ${{ secrets.CUSTOMER }}
   USERNAME: ${{ secrets.USERNAME }}
@@ -116,7 +116,9 @@ jobs:
                   --kwargs helm_branch=release \
                 deactivate
 
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
+          if: steps.StepIdPass.outcome == 'success'
+        - run: ls -la
         - name: Append to CSV if pass
           if: steps.StepIdPass.outcome == 'success'
           run: |
@@ -124,6 +126,7 @@ jobs:
             echo "$timestamp,pass" >> logs/sanity_logs.csv
             
         - name: Commit changes
+          if: steps.StepIdPass.outcome == 'success'
           uses: EndBug/add-and-commit@v7
           with:
             message: "Update sanily logs with new data - pass"
