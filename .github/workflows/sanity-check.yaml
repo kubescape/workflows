@@ -97,6 +97,7 @@ jobs:
 
         - name: run-tests
           if: ${{ inputs.IF_FAILED == false }}
+          id: StepIdPass
           uses: nick-fields/retry@v2
           with:
             timeout_seconds: 60
@@ -117,7 +118,7 @@ jobs:
 
         - uses: actions/checkout@v2
         - name: Append to CSV if pass
-          needs: [run-tests]
+          if: steps.StepIdPass.outcome == 'success'
           run: |
             timestamp=$(date +"%Y-%m-%d %H:%M:%S")
             echo "$timestamp,pass" >> logs/sanity_logs.csv
