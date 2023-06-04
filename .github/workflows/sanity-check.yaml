@@ -1,7 +1,4 @@
 name: system-sanity-check
-permissions:  
-  contents: write 
-  actions: read
 
 env:
   CUSTOMER: ${{ secrets.CUSTOMER }}
