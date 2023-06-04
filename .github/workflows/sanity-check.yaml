@@ -138,7 +138,7 @@ jobs:
             source systests_python_env/bin/activate
 
             while true; do
-              python3 systest-cli.pyt \
+              python3 systest-cli.py \
                 -t ${{ matrix.TEST }} \
                 -b production \
                 -c CyberArmorTests \
@@ -148,7 +148,8 @@ jobs:
 
               timestamp=$(date +"%Y-%m-%d %H:%M:%S")
               echo "$timestamp,failure" >> logs/sanity_logs.csv
-              if [ $? = 0 ]; then
+              sleep 10
+              if [ $? != 0 ]; then
                 break
               fi
               sleep 10
