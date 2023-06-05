@@ -122,7 +122,8 @@ jobs:
             cat /tmp/testhistory
             source systests_python_env/bin/activate
 
-            while true; do
+            # while true; do
+            for i in 1 2; do
               timestamp=$(date +"%Y-%m-%d %H:%M:%S")
               echo "$timestamp,failure" >> ~/sanity_logs.csv
               python3 systest-cli.py \
@@ -133,7 +134,7 @@ jobs:
                 --kwargs helm_branch=release \
                 deactivate
 
-              if [ $? != 0 ]; then
+              if [ $? = 0 ]; then
                 timestamp=$(date +"%Y-%m-%d %H:%M:%S")
                 echo "$timestamp,pass" >> ~/sanity_logs.csv
                 break
