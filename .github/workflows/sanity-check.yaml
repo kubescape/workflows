@@ -146,10 +146,11 @@ jobs:
                 --kwargs helm_branch=release \
                 deactivate
               pwd
-              ls -a ~/home/runner/work/workflows/workflows
+              ls -a 
 
-              # timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-              # echo "$timestamp,failure" >> ~/sanity_logs.csv
+              timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+              echo "$timestamp,failure" >> sanity_logs.csv
+              cat sanity_logs.csv
               
               # git add ~/sanity_logs.csv
               # sleep 5
