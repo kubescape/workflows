@@ -142,8 +142,7 @@ jobs:
             done
 
         - uses: actions/checkout@v3
-              pwd
-
+              
         - name: Append to CSV if pass
           if: steps.StepId1.outcome == 'success'
           run: |
