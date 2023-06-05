@@ -148,7 +148,7 @@ jobs:
 
               timestamp=$(date +"%Y-%m-%d %H:%M:%S")
               echo "$timestamp,failure" >> ~/sanity_logs.csv
-              git add ~/logs.csv
+              git add ~/sanity_logs.csv
               sleep 5
               git commit -s -am "Update sanily logs with new data - failure"
               sleep 5
