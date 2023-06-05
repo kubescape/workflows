@@ -152,7 +152,7 @@ jobs:
             eval sed\ s/\$/\\$'\n'/g\ ~/sanity_logs.csv | cat >> "logs/sanity_logs.csv"
 
         - name: Append to CSV if failure
-          if: steps.StepId2.outcome == 'failure'
+          if: steps.StepId2.outcome == 'success'
           run: |
             timestamp=$(date +"%Y-%m-%d %H:%M:%S")
             echo "$timestamp,failure" >> ~/sanity_logs.csv
