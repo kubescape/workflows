@@ -145,15 +145,18 @@ jobs:
                 --logger DEBUG \
                 --kwargs helm_branch=release \
                 deactivate
+              pwd
+              ls -a ~/home/runner/work/workflows/workflows
 
-              timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-              echo "$timestamp,failure" >> ~/sanity_logs.csv
-              git add ~/sanity_logs.csv
-              sleep 5
-              git commit -s -am "Update sanily logs with new data - failure"
-              sleep 5
-              git push
-              sleep 10
+              # timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+              # echo "$timestamp,failure" >> ~/sanity_logs.csv
+              
+              # git add ~/sanity_logs.csv
+              # sleep 5
+              # git commit -s -am "Update sanily logs with new data - failure"
+              # sleep 5
+              # git push
+              # sleep 10
               if [ $? != 0 ]; then
                 break
               fi
