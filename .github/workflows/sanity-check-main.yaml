@@ -44,6 +44,9 @@ jobs:
       #       --data '{"summary": "Test incident","sms": "false", "email": "true", "call": "true", "requester_email": "borisv@armosec.io", "description": "Automatic sanity check failed ! "}'
 
   call-reran:
+    permissions:  
+      contents: write 
+      actions: read
     needs: [ks-and-repo-test]
     if: failure()
     name: repeated-test

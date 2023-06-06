@@ -116,7 +116,6 @@ jobs:
         - name: run-tests-repeated
           if: ${{ inputs.IF_FAILED == true }}
           id: StepId2
-          continue-on-error: true
           run: |
             echo "Test history repeated:"
             echo " ${{ matrix.TEST }} " >/tmp/testhistory
@@ -138,10 +137,8 @@ jobs:
               if [ $? = 0 ]; then
                 timestamp=$(date +"%Y-%m-%d %H:%M:%S")
                 echo "$timestamp,pass" >> ~/sanity_logs.csv
-                echo "::set-output name=run_tests_repeated::true"
                 break
-              else
-                echo "::set-output name=run_tests_repeated::false"
+              
               fi
               
             done
@@ -156,8 +153,7 @@ jobs:
             eval sed\ s/\$/\\$'\n'/g\ ~/sanity_logs.csv | cat >> "logs/sanity_logs.csv"
 
         - name: Append to CSV if failure
-          #if: steps.StepId2.outcome == 'success'
-          if: steps.StepId2.outputs.run_tests_repeated == 'true'
+          if: steps.StepId2.outcome == 'success'
           run: |
             timestamp=$(date +"%Y-%m-%d %H:%M:%S")
             echo "$timestamp,failure" >> ~/sanity_logs.csv
