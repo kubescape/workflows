@@ -145,10 +145,10 @@ jobs:
               
         - name: Append to CSV if pass
           if: steps.StepId1.outcome == 'success'
-              # append to local csv if test pass
-              timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-              echo "$timestamp,1" >> ~/sanity_logs.csv
           run: |
+            # append to local csv if test pass
+            timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+            echo "$timestamp,1" >> ~/sanity_logs.csv
             eval sed\ s/\$/\\$'\n'/g\ ~/sanity_logs.csv | cat >> "logs/sanity_logs.csv"
 
         - name: Append to CSV if failure
