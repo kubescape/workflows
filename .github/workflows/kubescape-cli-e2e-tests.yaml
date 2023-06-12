@@ -14,6 +14,10 @@ on:
         description: 'The base file name that need to be used by "use_artifacts" kwargs flag (systests)'
         required: false
         type: string  
+      ADDITIONAL_KWARGS:
+        description: 'Supply additional --kwargs parameters to customize the command'
+        required: false
+        type: string 
       BINARY_TESTS:
         type: string
         default: '[ "scan_nsa", 
@@ -31,6 +35,7 @@ on:
                     "scan_with_custom_framework", 
                     "scan_customer_configuration", 
                     "host_scanner",
+                    "host_scanner_with_hostsensorrule",
                     "scan_compliance_score"
                   ]'
 jobs:
@@ -142,7 +147,8 @@ jobs:
             --duration 3                     \
             --logger DEBUG                   \
             --kwargs ks_branch=release       \
-            use_artifacts=${{steps.download-artifact.outputs.download-path}}/${{ inputs.USE_ARTIFACTS_FILE }}
+            use_artifacts=${{steps.download-artifact.outputs.download-path}}/${{ inputs.USE_ARTIFACTS_FILE }} \
+            ${{ inputs.ADDITIONAL_KWARGS }}
 
           deactivate
 
