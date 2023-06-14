@@ -2,6 +2,10 @@ name: pr-merged
 on:
   workflow_call:
     inputs:
+      HELM_BRANCH:
+        required: false
+        type: string
+        default: release
       IMAGE_NAME:
         required: true
         type: string
@@ -178,12 +182,12 @@ jobs:
           cat /tmp/testhistory
           source systests_python_env/bin/activate
 
-          python3 systest-cli.py             \
-            -t ${{ matrix.TEST }}            \
-            -b production                    \
-            -c CyberArmorTests               \
-            --logger DEBUG                   \
-            --kwargs helm_branch=release     \
+          python3 systest-cli.py                              \
+            -t ${{ matrix.TEST }}                             \
+            -b production                                     \
+            -c CyberArmorTests                                \
+            --logger DEBUG                                    \
+            --kwargs helm_branch=${{ inputs.HELM_BRANCH }}    \
             ${{ inputs.COMPONENT_NAME }}-tag=${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }}
 
           deactivate
