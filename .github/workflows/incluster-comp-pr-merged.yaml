@@ -32,7 +32,6 @@ on:
         description: 'docker build platforms'
       REQUIRED_TESTS:
         required: true
-        default: ""
         type: string
         description: 'tests to run'  
       COSIGN:
