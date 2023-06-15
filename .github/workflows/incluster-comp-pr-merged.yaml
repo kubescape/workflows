@@ -47,6 +47,11 @@ on:
         required: false
         default: false
         type: boolean
+      SYSTEM_TESTS_BRANCH:
+        required: false
+        default: master
+        type: string
+        description: 'system tests branch'
 
 jobs:
   docker-build:
@@ -144,6 +149,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: armosec/system-tests
+          ref: ${{ inputs.SYSTEM_TESTS_BRANCH }}
           path: .
 
       - uses: actions/setup-python@v4
@@ -165,8 +171,7 @@ jobs:
         with:
           cluster_name: ${{ steps.uuid.outputs.RANDOM_UUID }}
           # kubectl_version: v1.23.12
-          # verbosity:
-
+      
       - name: run-tests
         env:
           CUSTOMER: ${{ secrets.CUSTOMER }}
