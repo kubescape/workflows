@@ -140,7 +140,6 @@ jobs:
       fail-fast: false    
       matrix:
         TEST: ${{ fromJson(needs.docker-build.outputs.TEST_NAMES) }}
-    if: ${{ contains( github.event.pull_request.labels.*.name, 'trigger-integration-test') }}
     needs: docker-build
     runs-on: ubuntu-latest
     steps:
