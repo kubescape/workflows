@@ -1,0 +1,57 @@
+name: Kubescape scanning for misconfigurations
+
+on:
+  workflow_call:
+    inputs:
+      GO_VERSION:
+        required: true
+        type: string
+      GO111MODULE:
+        required: false
+        type: string
+      CGO_ENABLED:
+        required: false
+        type: number
+        default: 1
+      RELEASE:
+        required: true
+        type: string
+      IS_DRAFT:
+        required: false
+        type: boolean
+        default: false
+      BUILD_PATH:
+        required: false
+        type: string
+        default: "./..."
+      UNIT_TESTS_PATH:
+        required: false
+        type: string
+        default: "./..."
+      # TEST_MULTI_ENVIRONMENTS:
+      #   required: false
+      #   type: boolean
+      #   default: true
+jobs:
+  kubescape:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+    - uses: actions/checkout@v3
+    - uses: kubescape/github-action@main
+      continue-on-error: true
+      with:
+        format: sarif
+        outputFile: results
+        account: ${{secrets.KUBESCAPE_ACCOUNT}}
+        # files: "examples/*.yaml"
+        # frameworks: |
+        #   nsa,mitre
+        failedThreshold: 60
+    - name: Upload Kubescape scan results to Github Code Scanning
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: results.sarif
