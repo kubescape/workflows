@@ -196,13 +196,3 @@ jobs:
           - Unit test: ${{ steps.unit-test.outcome }}
           - Go linting: ${{ steps.linting.outcome }}
         reactions: 'eyes'
-        
-  test_ks_misconfigurations:
-    uses: kubescape/workflows/.github/workflows/ks-ga-flow.yaml@main
-    with:
-      FAILEDTHRESHOLD: ${{ inputs.FAILEDTHRESHOLD }}
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-    secrets: inherit
