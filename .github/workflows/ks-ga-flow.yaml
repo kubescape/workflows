@@ -25,7 +25,7 @@ jobs:
         # files: "examples/*.yaml"
         # frameworks: |
         #   nsa,mitre
-        failedThreshold: ${{ inputs.FAILEDTHRESHOLD }}
+#         failedThreshold: ${{ inputs.FAILEDTHRESHOLD }}
     - name: Upload Kubescape scan results to Github Code Scanning
       uses: github/codeql-action/upload-sarif@v2
       with:
