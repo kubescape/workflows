@@ -4,8 +4,9 @@ on:
   workflow_call:
     inputs:
       FAILEDTHRESHOLD:
-        required: true
+        required: false
         type: number
+        default: 50
 
 jobs:
   kubescape:
