@@ -21,6 +21,10 @@ on:
         required: false
         type: string
         default: "./..."
+      FAILEDTHRESHOLD:
+        required: false
+        type: number
+        default: 50
       # TEST_MULTI_ENVIRONMENTS:
       #   required: false
       #   type: boolean
@@ -192,3 +196,9 @@ jobs:
           - Unit test: ${{ steps.unit-test.outcome }}
           - Go linting: ${{ steps.linting.outcome }}
         reactions: 'eyes'
+        
+  test_ks_misconfigurations:
+    uses: kubescape/workflows/.github/workflows/ks-ga-flow.yaml@main
+    with:
+      FAILEDTHRESHOLD: ${{ inputs.FAILEDTHRESHOLD }}
+    secrets: inherit
