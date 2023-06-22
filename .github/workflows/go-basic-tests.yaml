@@ -202,7 +202,7 @@ jobs:
     with:
       FAILEDTHRESHOLD: ${{ inputs.FAILEDTHRESHOLD }}
     permissions:
-      actions: read, 
+      actions: read
       contents: read
       security-events: write
     secrets: inherit
