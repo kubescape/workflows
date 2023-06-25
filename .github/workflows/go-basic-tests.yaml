@@ -182,7 +182,10 @@ jobs:
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         path-to-lcov: coverage.lcov
-
+        
+    - name: Test Kubescape Misconfigurations
+      uses: kubescape/workflows/.github/workflows/ks-ga-flow.yaml@main
+    
     - name: Comment results to PR
       uses: peter-evans/create-or-update-comment@v2
       continue-on-error: true # This step typically fails when opening PRs from forks 
