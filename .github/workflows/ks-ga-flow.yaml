@@ -23,6 +23,7 @@ jobs:
         format: sarif
         outputFile: results
         account: ${{secrets.KUBESCAPE_ACCOUNT}}
+        severityThreshold: ""
         # files: "examples/*.yaml"
         # frameworks: |
         #   nsa,mitre
