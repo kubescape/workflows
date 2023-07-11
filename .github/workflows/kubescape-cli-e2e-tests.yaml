@@ -4,16 +4,20 @@ on:
     inputs:
       DOWNLOAD_ARTIFACT_PATH:
         description: 'Download artifact path'
-        required: true
+        required: false
         type: string
       DOWNLOAD_ARTIFACT_KEY_NAME:
         description: 'Download artifact Key name'
-        required: true
+        required: false
         type: string
       USE_ARTIFACTS_FILE:
-        description: 'The base file name that need to be used by "use_artifacts" kwargs flag (systests)'
+        description: 'The base file name that needs to be used by "use_artifacts" kwargs flag (systests)'
         required: false
-        type: string  
+        type: string
+      ADDITIONAL_KWARGS:
+        description: 'Additional command line arguments for systest-cli.py'
+        required: false
+        type: string
       BINARY_TESTS:
         type: string
         default: '[ "scan_nsa", 
@@ -134,16 +138,22 @@ jobs:
           echo " ${{ matrix.TEST }} " >/tmp/testhistory
           cat /tmp/testhistory
           source systests_python_env/bin/activate
-
+          if [[ -n "${{ steps.download-artifact.outputs.download-path }}" ]]; then
+            USE_ARTIFACTS="${{steps.download-artifact.outputs.download-path}}/${{ inputs.USE_ARTIFACTS_FILE }}"
+            ARGS="--kwargs use_artifacts=$USE_ARTIFACTS ks_branch=release"
+          else
+            ARGS="--kwargs ks_branch=release"
+          fi
+          if [[ -n "${{ inputs.ADDITIONAL_KWARGS }}" ]]; then
+            ARGS+=" ${{ inputs.ADDITIONAL_KWARGS }}"
+          fi
           python3 systest-cli.py             \
             -t ${{ matrix.TEST }}            \
             -b production                    \
             -c CyberArmorTests               \
             --duration 3                     \
             --logger DEBUG                   \
-            --kwargs ks_branch=release       \
-            use_artifacts=${{steps.download-artifact.outputs.download-path}}/${{ inputs.USE_ARTIFACTS_FILE }}
-
+            $ARGS
           deactivate
 
       - name: Test Report
