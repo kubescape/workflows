@@ -7,6 +7,10 @@ on:
         required: false
         type: number
         default: 50
+      FRAMEWORKS:
+        required: true
+        type: string
+        default: "nsa,mitre"
 
 jobs:
   kubescape:
@@ -25,9 +29,8 @@ jobs:
         account: ${{secrets.KUBESCAPE_ACCOUNT}}
         severityThreshold: ""
         # files: "examples/*.yaml"
-        # frameworks: |
-        #   nsa,mitre
-#         failedThreshold: ${{ inputs.FAILEDTHRESHOLD }}
+        frameworks: ${{ inputs.FRAMEWORKS }}
+        #   failedThreshold: ${{ inputs.FAILEDTHRESHOLD }}
     - name: Upload Kubescape scan results to Github Code Scanning
       uses: github/codeql-action/upload-sarif@v2
       with:
