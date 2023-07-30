@@ -78,10 +78,10 @@ jobs:
           fetch-depth: 0
         #   submodules: recursive
 
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         name: Installing go
         with:
-          go-version: ${{ inputs.GO_VERSION }}
+          go-version: '${{ inputs.GO_VERSION }}'
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
