@@ -83,10 +83,10 @@ jobs:
         with:
           submodules: recursive
   
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         name: Setup Go 
         with:
-          go-version: ${{ inputs.GO_VERSION }}
+          go-version: '${{ inputs.GO_VERSION }}'
 
       - name: Test race conditions
         if: ${{ env.CGO_ENABLED == 1 }}
@@ -124,10 +124,10 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - uses: actions/setup-go@v3
+    - uses: actions/setup-go@v4
       name: Setup Go 
       with:
-        go-version: ${{ inputs.GO_VERSION }}
+        go-version: '${{ inputs.GO_VERSION }}'
 
     - name: Scanning - Forbidden Licenses (go-licenses)
       id: licenses-scan
