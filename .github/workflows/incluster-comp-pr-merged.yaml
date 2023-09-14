@@ -52,10 +52,14 @@ on:
         default: master
         type: string
         description: 'system tests branch'
+      FORCE:
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   docker-build:
-    if: ${{ (contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape' }}  
+    if: ${{ ((contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape') || ${{ inputs.FORCE }} = true }}  
     runs-on: ubuntu-latest
     outputs:
       IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
