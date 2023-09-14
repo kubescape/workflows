@@ -5,7 +5,7 @@ on:
       HELM_BRANCH:
         required: false
         type: string
-        default: release
+        default: main
       IMAGE_NAME:
         required: true
         type: string
@@ -52,10 +52,14 @@ on:
         default: master
         type: string
         description: 'system tests branch'
+      FORCE:
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   docker-build:
-    if: ${{ (contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape' }}  
+    if: ${{ ((contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape') || inputs.FORCE }}  
     runs-on: ubuntu-latest
     outputs:
       IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
@@ -254,7 +258,6 @@ jobs:
         with:
           workflow: 00-cicd.yaml
           repo: kubescape/helm-charts
-          ref: dev
+          ref: ${{ inputs.HELM_BRANCH }}
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           inputs: '{"IMAGE_TAG":"${{ inputs.IMAGE_TAG }}","COMPONENT_NAME":"${{ inputs.COMPONENT_NAME }}","HELM_E2E_TEST":"${{ inputs.HELM_E2E_TEST }}","CHANGE_TAG":"true"}'
-          
