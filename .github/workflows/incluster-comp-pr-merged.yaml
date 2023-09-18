@@ -33,7 +33,7 @@ on:
       REQUIRED_TESTS:
         required: true
         type: string
-        description: 'tests to run'  
+        description: 'tests to run'
       COSIGN:
         required: false
         default: false
@@ -59,7 +59,7 @@ on:
 
 jobs:
   docker-build:
-    if: ${{ ((contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape') || inputs.FORCE }}  
+    if: ${{ ((contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape') || inputs.FORCE }}
     runs-on: ubuntu-latest
     outputs:
       IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
@@ -67,8 +67,8 @@ jobs:
     permissions:
       id-token: write
       packages: write
-      contents: read    
-      pull-requests: read  
+      contents: read
+      pull-requests: read
 
     steps:
 
@@ -100,7 +100,7 @@ jobs:
       - name: Run unit test
         id: unit-test
         run: go test -v ./...
-      
+
       - name: Login to Quay
         uses: docker/login-action@v2
         with:
@@ -141,10 +141,11 @@ jobs:
 
   run-tests:
     strategy:
-      fail-fast: false    
+      fail-fast: false
       matrix:
         TEST: ${{ fromJson(needs.docker-build.outputs.TEST_NAMES) }}
     needs: docker-build
+    if: ${{ needs.docker-build.outputs.TEST_NAMES != '' && toJson(fromJson(needs.docker-build.outputs.TEST_NAMES)) != '[]' }}
     runs-on: ubuntu-latest
     steps:
 
@@ -158,7 +159,7 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8.13'
-          cache: 'pip' 
+          cache: 'pip'
 
       - name: create env
         run: ./create_env.sh
@@ -174,7 +175,7 @@ jobs:
         with:
           cluster_name: ${{ steps.uuid.outputs.RANDOM_UUID }}
           # kubectl_version: v1.23.12
-      
+
       - name: run-tests
         env:
           CUSTOMER: ${{ secrets.CUSTOMER }}
@@ -204,7 +205,7 @@ jobs:
         uses: mikepenz/action-junit-report@v3.6.1
         if: always() # always run even if the previous step fails
         with:
-          report_paths: '**/results_xml_format/**.xml'          
+          report_paths: '**/results_xml_format/**.xml'
 
 
   create-release-and-retag:
@@ -213,7 +214,7 @@ jobs:
     needs: [run-tests, docker-build]
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
-    runs-on: ubuntu-latest  
+    runs-on: ubuntu-latest
 
     steps:
 
