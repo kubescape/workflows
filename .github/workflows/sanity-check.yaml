@@ -8,6 +8,9 @@ on:
  
   workflow_call:
       inputs:
+        SYSTEM_TESTS_BRANCH:
+          type: string
+          default: "master"
         BINARY_TESTS:
           type: string
           default: '[ "scan_nsa", 
@@ -67,6 +70,7 @@ jobs:
           with:
             repository: armosec/system-tests
             path: .
+            ref: ${{ inputs.SYSTEM_TESTS_BRANCH }}
 
         - uses: actions/setup-python@v4
           with:
