@@ -69,3 +69,11 @@ The Helm chart CICD will:
 
 ### A draw of the flow:
 ![Workflow](./assets/incluster_component_flow.jpeg)
+
+## Available Workflows
+
+Here's the list of reusable workflows available from this repository:
+
+| **Name**            | **Variables**                                                | **Description**                                              |
+| ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| `sanity-check.yaml` | -  `SYSTEM_TESTS_BRANCH`: define alternative branch to clone for [system-tests](github.com/armosec/system-tests) repository. Default: `master`<br />- `BINARY_TESTS`: specify which tests are going to be executed by the workflow. | This workflow allow you to run **system-tests** in the **production** environment |
