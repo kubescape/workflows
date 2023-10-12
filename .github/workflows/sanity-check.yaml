@@ -8,6 +8,9 @@ on:
  
   workflow_call:
       inputs:
+        GH_RUNNER:
+          type: string
+          default: "ubuntu-latest"
         SYSTEM_TESTS_BRANCH:
           type: string
           default: "master"
@@ -62,7 +65,7 @@ jobs:
         matrix:
           TEST: ${{ fromJson(needs.wf-preparation.outputs.TEST_NAMES) }}
       needs: wf-preparation
-      runs-on: ubuntu-large
+      runs-on: ${{ inputs.GH_RUNNER }}
       steps:
 
         - name: Checkout systests repo
