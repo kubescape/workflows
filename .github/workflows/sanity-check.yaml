@@ -62,7 +62,7 @@ jobs:
         matrix:
           TEST: ${{ fromJson(needs.wf-preparation.outputs.TEST_NAMES) }}
       needs: wf-preparation
-      runs-on: ubuntu-latest
+      runs-on: ubuntu-large
       steps:
 
         - name: Checkout systests repo
