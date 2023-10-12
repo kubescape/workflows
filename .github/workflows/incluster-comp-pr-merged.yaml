@@ -120,6 +120,16 @@ jobs:
           cache-to: type=gha,mode=max
           push: true
 
+      - name: Generate SBOM for container image
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
+          output-file: ${{ inputs.IMAGE_NAME }}-sbom.spdx.json
+
+      - uses: anchore/sbom-action/publish-sbom@v0
+        with:
+          sbom-artifact-match: ".*\\.spdx.json$"
+
       - name: Install cosign
         uses: sigstore/cosign-installer@main
         with:
