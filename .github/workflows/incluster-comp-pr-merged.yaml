@@ -139,7 +139,7 @@ jobs:
             # Sign the image with key for verifier clients without keyless support
             # Put the key from environment variable to a file
             echo "$COSIGN_PRIVATE_KEY" > cosign.key
-            printf "$COSIGN_PRIVATE_KEY_PASSWORD" | cosign sign -key cosign.key ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+            printf "$COSIGN_PRIVATE_KEY_PASSWORD" | cosign sign -key cosign.key -y ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
             rm cosign.key
             # Verify the image
             echo "$COSIGN_PUBLIC_KEY" > cosign.pub
