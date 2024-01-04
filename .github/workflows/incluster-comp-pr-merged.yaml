@@ -129,8 +129,22 @@ jobs:
         if: ${{ inputs.COSIGN }}
         env:
           COSIGN_EXPERIMENTAL: "true"
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY_V1 }}
+          COSIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.COSIGN_PRIVATE_KEY_V1_PASSWORD }}
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY_V1 }}
         run: |
+            # Sign the image with keyless mode
             cosign sign --force ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+
+            # Sign the image with key for verifier clients without keyless support
+            # Put the key from environment variable to a file
+            echo "$COSIGN_PRIVATE_KEY" > cosign.key
+            printf "$COSIGN_PRIVATE_KEY_PASSWORD" | cosign sign -key cosign.key -y ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+            rm cosign.key
+            # Verify the image
+            echo "$COSIGN_PUBLIC_KEY" > cosign.pub
+            cosign verify -key cosign.pub ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+
 
       - id: export_tests_to_env
         name: set test name
@@ -235,7 +249,7 @@ jobs:
 
           if [ ${{ inputs.COSIGN }} = true ]; then
             ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }} --digest-tags
-            ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest --digest-tags      
+            ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest --digest-tags
           else
             ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
             ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest
