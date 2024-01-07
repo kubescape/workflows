@@ -134,7 +134,7 @@ jobs:
           COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY_V1 }}
         run: |
             # Sign the image with keyless mode
-            cosign sign --force ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+            cosign sign -y ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
 
             # Sign the image with key for verifier clients without keyless support
             # Put the key from environment variable to a file
