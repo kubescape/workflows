@@ -123,7 +123,7 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@main
         with:
-          cosign-release: 'v1.12.0'
+          cosign-release: 'v2.2.2'
 
       - name: sign kubescape container image
         if: ${{ inputs.COSIGN }}
