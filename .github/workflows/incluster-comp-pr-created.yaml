@@ -22,6 +22,9 @@ on:
         required: false
         type: string
         default: "./..."
+      GO111MODULE:
+        required: false
+        type: string
       UNIT_TESTS_PATH:
         required: false
         type: string
