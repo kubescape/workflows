@@ -114,7 +114,7 @@ jobs:
           context: .
           file: build/Dockerfile
           tags: ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
-          build-args: image_version=${{ steps.image-prerelease-tag.outputs.IMAGE_TAG }}
+          build-args: image_version=${{ inputs.IMAGE_TAG }}
           platforms: ${{ inputs.BUILD_PLATFORM }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -219,6 +219,7 @@ jobs:
         uses: mikepenz/action-junit-report@v3.6.1
         if: always() # always run even if the previous step fails
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: '**/results_xml_format/**.xml'
 
 
