@@ -2,6 +2,10 @@ name: ks-cli-dynamic-e2e-test
 on:
   workflow_call:
     inputs:
+      KIND_CONFIG_FILE:
+        description: 'Configuration file for Kind setup'
+        required: false
+        type: string
       DOWNLOAD_ARTIFACT_PATH:
         description: 'Download artifact path'
         required: true
@@ -113,6 +117,7 @@ jobs:
         uses: helm/kind-action@d08cf6ff1575077dee99962540d77ce91c62387d # ratchet:helm/kind-action@v1.3.0
         with:
           cluster_name: ${{ steps.uuid.outputs.RANDOM_UUID }}
+          config: ${{ inputs.KIND_CONFIG_FILE }}
 
       - uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # ratchet:actions/download-artifact@v3.0.2
         id: download-artifact
