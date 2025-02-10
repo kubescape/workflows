@@ -76,22 +76,22 @@ jobs:
       #   if: github.ref == 'master'
       #   run: exit -1
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         name: Checkout
         with:
           fetch-depth: 0
         #   submodules: recursive
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         name: Installing go
         with:
           go-version: '${{ inputs.GO_VERSION }}'
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Set prerelease image tag
         id: image-prerelease-tag
@@ -102,14 +102,14 @@ jobs:
         run: go test -v ./...
 
       - name: Login to Quay
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: quay.io
           username: ${{ secrets.QUAYIO_REGISTRY_USERNAME }}
           password: ${{ secrets.QUAYIO_REGISTRY_PASSWORD }}
 
       - name: Build and push
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: build/Dockerfile
@@ -164,13 +164,13 @@ jobs:
     steps:
 
       - name: Checkout systests repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: armosec/system-tests
           ref: ${{ inputs.SYSTEM_TESTS_BRANCH }}
           path: .
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.8.13'
           cache: 'pip'
@@ -185,7 +185,7 @@ jobs:
 
       - name: Create k8s Kind Cluster
         id: kind-cluster-install
-        uses: helm/kind-action@v1.10.0
+        uses: helm/kind-action@v1
         with:
           cluster_name: ${{ steps.uuid.outputs.RANDOM_UUID }}
           # kubectl_version: v1.23.12
@@ -220,7 +220,7 @@ jobs:
           deactivate
 
       - name: Test Report
-        uses: mikepenz/action-junit-report@v3.6.1
+        uses: mikepenz/action-junit-report@v5
         if: always() # always run even if the previous step fails
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -238,10 +238,10 @@ jobs:
       contents: write
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Quay
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: quay.io
           username: ${{ secrets.QUAYIO_REGISTRY_USERNAME }}
@@ -262,7 +262,7 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: ncipollo/release-action@v1.11.1
+        uses: ncipollo/release-action@v1
         with:
           token:  ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ inputs.IMAGE_TAG }}
@@ -274,7 +274,7 @@ jobs:
 
       - name: Trigger helm chart workflow
         if: ${{ inputs.TRIGGER_HELM_CICD == true }}
-        uses: benc-uk/workflow-dispatch@v1.2.2
+        uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: 00-cicd.yaml
           repo: kubescape/helm-charts
