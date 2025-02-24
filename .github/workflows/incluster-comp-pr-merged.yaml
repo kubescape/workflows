@@ -228,7 +228,7 @@ jobs:
 
 
   create-release-and-retag:
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'release') && always() && contains(needs.*.result, 'success') && !(contains(needs.*.result, 'failure')) && !(contains (needs.*.result,'cancelled')) }}
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'release') && always() && contains(needs.*.result, 'success') && !(contains(needs.*.result, 'failure')) && !(contains (needs.*.result,'cancelled')) || inputs.FORCE }}
     name: Docker retag and create release
     needs: [run-tests, docker-build]
     outputs:
