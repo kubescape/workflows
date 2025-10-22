@@ -60,7 +60,7 @@ on:
 jobs:
     docker-build:
         if: ${{ ((contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape') || inputs.FORCE }}
-        runs-on: ubuntu22-large-8c-32gb-300gb
+        runs-on: ubuntu-latest-16-cores 
         outputs:
             IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
             TEST_NAMES: ${{ steps.export_tests_to_env.outputs.TEST_NAMES }}
