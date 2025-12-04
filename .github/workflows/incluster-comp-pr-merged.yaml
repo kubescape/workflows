@@ -99,6 +99,17 @@ jobs:
             - name: Run unit test
               id: unit-test
               run: go test -v ./...
+            - name: debug
+              run: |
+                  if [ -z "$QUAY_PASSWORD" ]; then
+                    echo "QUAY_PASSWORD is not set"
+                    exit 1
+                  fi
+                  if [ -z "$QUAY_USERNAME" ]; then
+                    echo "QUAY_USERNAME is not set"
+                    exit 1
+                  fi
+                  
 
             - name: Login to Quay
               uses: docker/login-action@v3
