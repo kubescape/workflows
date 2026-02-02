@@ -1,5 +1,61 @@
 name: pr-merged
 on:
+    workflow_dispatch:
+        inputs:
+            HELM_BRANCH:
+                required: false
+                type: string
+                default: main
+            IMAGE_NAME:
+                required: true
+                type: string
+            IMAGE_TAG:
+                required: true
+                type: string
+            COMPONENT_NAME:
+                required: true
+                type: string
+            GO_VERSION:
+                required: true
+                type: string
+            GO111MODULE:
+                required: false
+                type: string
+            CGO_ENABLED:
+                required: false
+                type: number
+                default: 1
+            BUILD_PLATFORM:
+                required: false
+                type: string
+                default: "linux/amd64"
+                description: "docker build platforms"
+            REQUIRED_TESTS:
+                required: true
+                type: string
+                description: "tests to run"
+            COSIGN:
+                required: false
+                default: false
+                type: boolean
+                description: "run cosign on released image"
+            TRIGGER_HELM_CICD:
+                required: false
+                default: true
+                type: boolean
+            HELM_E2E_TEST:
+                required: false
+                default: false
+                type: boolean
+            SYSTEM_TESTS_BRANCH:
+                required: false
+                default: master
+                type: string
+                description: "system tests branch"
+            FORCE:
+                required: false
+                default: false
+                type: boolean
     workflow_call:
         inputs:
             HELM_BRANCH:
