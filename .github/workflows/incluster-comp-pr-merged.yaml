@@ -1,4 +1,7 @@
 name: pr-merged
+permissions:
+    actions: read
+    contents: read
 on:
     workflow_dispatch:
         inputs:
@@ -249,7 +252,17 @@ jobs:
                       print(" ".join(tests))
                   PY
                   )
-                  TESTS_GROUP="OPERATOR_E2E"
+                  case "${{ inputs.COMPONENT_NAME }}" in
+                    operator)
+                      TESTS_GROUP="OPERATOR_E2E"
+                      ;;
+                    kubevuln)
+                      TESTS_GROUP="KUBEVULN_E2E"
+                      ;;
+                    *)
+                      TESTS_GROUP="CUSTOM_ONLY"
+                      ;;
+                  esac
 
                   echo "Dispatching E2E tests with correlation_id: ${CORRELATION_ID}"
                   echo "Using tests group: ${TESTS_GROUP}"
