@@ -262,6 +262,12 @@ jobs:
                     http-request)
                       TESTS_GROUP="HTTP_REQUEST"
                       ;;
+                    nodeAgent)
+                      TESTS_GROUP="NODE_AGENT_E2E"
+                      ;;
+                    storage)
+                      TESTS_GROUP="STORAGE_E2E"
+                      ;;
                     *)
                       TESTS_GROUP="CUSTOM_ONLY"
                       ;;
