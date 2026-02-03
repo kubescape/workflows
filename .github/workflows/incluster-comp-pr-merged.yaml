@@ -259,6 +259,9 @@ jobs:
                     kubevuln)
                       TESTS_GROUP="KUBEVULN_E2E"
                       ;;
+                    http-request)
+                      TESTS_GROUP="HTTP_REQUEST"
+                      ;;
                     *)
                       TESTS_GROUP="CUSTOM_ONLY"
                       ;;
