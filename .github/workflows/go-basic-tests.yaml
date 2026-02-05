@@ -136,7 +136,7 @@ jobs:
         echo "## Installing go-licenses tool"
         go install github.com/google/go-licenses@latest
         echo "## Scanning for forbiden licenses ##"
-        go-licenses check .
+        go-licenses check ./...
 
     - name: Scanning - Credentials (GitGuardian)
       if: needs.check-secret.outputs.run-gitgardian == 'true'
