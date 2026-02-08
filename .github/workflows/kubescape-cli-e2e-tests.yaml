@@ -124,7 +124,7 @@ jobs:
                       print(" ".join(tests))
                   PY
                   )
-                  TESTS_GROUP="CUSTOM_ONLY"
+                  TESTS_GROUP="rego_E2E"
 
                   echo "Dispatching E2E tests with correlation_id: ${CORRELATION_ID}"
                   echo "Using tests group: ${TESTS_GROUP}"
