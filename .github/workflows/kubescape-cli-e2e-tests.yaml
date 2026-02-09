@@ -129,6 +129,14 @@ jobs:
                   echo "Dispatching E2E tests with correlation_id: ${CORRELATION_ID}"
                   echo "Using tests group: ${TESTS_GROUP}"
 
+                  SOURCE_ARTIFACT=$(jq -cn \
+                    --arg repo "${GITHUB_REPOSITORY}" \
+                    --arg run_id "${{ github.run_id }}" \
+                    --arg name "${{ inputs.DOWNLOAD_ARTIFACT_KEY_NAME }}" \
+                    --arg path "${{ inputs.DOWNLOAD_ARTIFACT_PATH }}" \
+                    --arg use_file "${{ inputs.USE_ARTIFACTS_FILE }}" \
+                    '{repo: $repo, run_id: $run_id, name: $name, path: $path, use_file: $use_file}')
+
                   gh api "repos/armosec/shared-workflows/dispatches" \
                     -f event_type="e2e-test-trigger" \
                     -f "client_payload[correlation_id]=${CORRELATION_ID}" \
@@ -138,11 +146,7 @@ jobs:
                     -f "client_payload[additional_tests]=${ADDITIONAL_TESTS}" \
                     -f "client_payload[systests_branch]=${{ inputs.SYSTEM_TESTS_BRANCH }}" \
                     -f "client_payload[ks_branch]=release" \
-                    -f "client_payload[source_artifact_repo]=${GITHUB_REPOSITORY}" \
-                    -f "client_payload[source_artifact_run_id]=${{ github.run_id }}" \
-                    -f "client_payload[source_artifact_name]=${{ inputs.DOWNLOAD_ARTIFACT_KEY_NAME }}" \
-                    -f "client_payload[source_artifact_path]=${{ inputs.DOWNLOAD_ARTIFACT_PATH }}" \
-                    -f "client_payload[use_artifacts_file]=${{ inputs.USE_ARTIFACTS_FILE }}"
+                    --raw-field "client_payload[source_artifact]=${SOURCE_ARTIFACT}"
 
                   echo "Dispatch completed"
 
