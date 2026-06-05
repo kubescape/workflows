@@ -183,7 +183,7 @@ jobs:
             - name: Attest image provenance
               uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
               with:
-                  subject-name: ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+                  subject-name: ${{ inputs.IMAGE_NAME }}
                   subject-digest: ${{ steps.build.outputs.digest }}
                   push-to-registry: true
 
