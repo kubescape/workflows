@@ -124,6 +124,7 @@ jobs:
             IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
             TEST_NAMES: ${{ steps.export_tests_to_env.outputs.TEST_NAMES }}
         permissions:
+            actions: write
             id-token: write
             packages: write
             contents: read
