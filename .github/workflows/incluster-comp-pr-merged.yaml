@@ -130,9 +130,7 @@ jobs:
         steps:
             - name: Set prerelease image tag
               id: image-prerelease-tag
-              env:
-                  IMAGE_TAG: ${{ inputs.IMAGE_TAG }}
-              run: echo "IMAGE_TAG_PRERELEASE=${IMAGE_TAG}-prerelease" >> "$GITHUB_OUTPUT"
+              run: echo "IMAGE_TAG_PRERELEASE=${{ inputs.IMAGE_TAG }}-prerelease" >> $GITHUB_OUTPUT
 
             - name: Build platform matrix
               id: platforms
@@ -514,20 +512,16 @@ jobs:
                   password: ${{ secrets.QUAYIO_REGISTRY_PASSWORD }}
 
             - name: Docker retag
-              env:
-                  IMAGE_NAME: ${{ inputs.IMAGE_NAME }}
-                  TAG_PRERELEASE: ${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
-                  TAG: ${{ inputs.IMAGE_TAG }}
               run: |
                   curl -L https://github.com/regclient/regclient/releases/download/v0.4.4/regctl-linux-amd64 >regctl
                   chmod 755 regctl
 
                   if [ ${{ inputs.COSIGN }} = true ]; then
-                    ./regctl image copy "${IMAGE_NAME}:${TAG_PRERELEASE}" "${IMAGE_NAME}:${TAG}" --digest-tags
-                    ./regctl image copy "${IMAGE_NAME}:${TAG_PRERELEASE}" "${IMAGE_NAME}:latest" --digest-tags
+                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }} --digest-tags
+                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest --digest-tags
                   else
-                    ./regctl image copy "${IMAGE_NAME}:${TAG_PRERELEASE}" "${IMAGE_NAME}:${TAG}"
-                    ./regctl image copy "${IMAGE_NAME}:${TAG_PRERELEASE}" "${IMAGE_NAME}:latest"
+                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
+                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest
                   fi
 
             - name: Create Release
