@@ -117,49 +117,87 @@ on:
                 type: boolean
 
 jobs:
-    docker-build:
+    setup:
         if: ${{ ((contains(github.event.pull_request.labels.*.name, 'release') || contains( github.event.pull_request.labels.*.name, 'trigger-integration-test')) && github.repository_owner == 'kubescape') || inputs.FORCE }}
-        runs-on: ubuntu-large 
+        runs-on: ubuntu-latest
         outputs:
             IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
             TEST_NAMES: ${{ steps.export_tests_to_env.outputs.TEST_NAMES }}
+            BUILD_MATRIX: ${{ steps.platforms.outputs.BUILD_MATRIX }}
         permissions:
-            actions: write
-            id-token: write
-            packages: write
             contents: read
             pull-requests: read
-            attestations: write
-
         steps:
-            # - name: Exit if not on master branch
-            #   if: github.ref == 'master'
-            #   run: exit -1
+            - name: Set prerelease image tag
+              id: image-prerelease-tag
+              run: echo "IMAGE_TAG_PRERELEASE=${{ inputs.IMAGE_TAG }}-prerelease" >> $GITHUB_OUTPUT
 
+            - name: Build platform matrix
+              id: platforms
+              env:
+                  BUILD_PLATFORM: ${{ inputs.BUILD_PLATFORM }}
+              run: |
+                  INCLUDE="[]"
+                  IFS=',' read -ra PLATFORMS <<< "$BUILD_PLATFORM"
+                  for PLATFORM in "${PLATFORMS[@]}"; do
+                    ARCH="${PLATFORM##*/}"
+                    case "$ARCH" in
+                      amd64) RUNNER=ubuntu-large ;;
+                      arm64) RUNNER=ubuntu-large-arm64 ;;
+                      *)
+                        echo "::error::Unsupported platform '$PLATFORM' in BUILD_PLATFORM — expected linux/amd64 and/or linux/arm64"
+                        exit 1
+                        ;;
+                    esac
+                    INCLUDE=$(echo "$INCLUDE" | jq -c --arg platform "$PLATFORM" --arg arch "$ARCH" --arg runner "$RUNNER" \
+                      '. + [{"platform":$platform,"arch":$arch,"runner":$runner}]')
+                  done
+                  echo "BUILD_MATRIX=$(jq -c -n --argjson include "$INCLUDE" '{"include":$include}')" >> "$GITHUB_OUTPUT"
+
+            - id: export_tests_to_env
+              name: set test name
+              run: |
+                  echo "TEST_NAMES=$input" >> $GITHUB_OUTPUT
+              env:
+                  input: ${{ inputs.REQUIRED_TESTS }}
+
+    unit-test:
+        needs: setup
+        runs-on: ubuntu-large
+        permissions:
+            contents: read
+        steps:
             - uses: actions/checkout@v4
               name: Checkout
               with:
                   fetch-depth: 0
-              #   submodules: recursive
 
             - uses: actions/setup-go@v5
               name: Installing go
               with:
                   go-version: "${{ inputs.GO_VERSION }}"
 
-            - name: Set up QEMU
-              uses: docker/setup-qemu-action@v3
+            - name: Run unit test
+              run: go test -v ./...
+
+    build:
+        needs: [setup, unit-test]
+        strategy:
+            fail-fast: false
+            matrix: ${{ fromJson(needs.setup.outputs.BUILD_MATRIX) }}
+        runs-on: ${{ matrix.runner }}
+        permissions:
+            actions: write
+            contents: read
+            packages: write
+        steps:
+            - uses: actions/checkout@v4
+              name: Checkout
+              with:
+                  fetch-depth: 0
 
             - name: Set up Docker Buildx
               uses: docker/setup-buildx-action@v3
-
-            - name: Set prerelease image tag
-              id: image-prerelease-tag
-              run: echo "IMAGE_TAG_PRERELEASE=${{ inputs.IMAGE_TAG }}-prerelease" >> $GITHUB_OUTPUT
-
-            - name: Run unit test
-              id: unit-test
-              run: go test -v ./...
 
             - name: Login to Quay
               uses: docker/login-action@v3
@@ -169,23 +207,53 @@ jobs:
                   password: ${{ secrets.QUAYIO_REGISTRY_PASSWORD }}
 
             - name: Build and push
-              id: build
               uses: docker/build-push-action@v6
               with:
                   context: .
                   file: build/Dockerfile
-                  tags: ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+                  tags: ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}-${{ matrix.arch }}
                   build-args: image_version=${{ inputs.IMAGE_TAG }}
-                  platforms: ${{ inputs.BUILD_PLATFORM }}
-                  cache-from: type=gha
-                  cache-to: type=gha,mode=max
+                  platforms: ${{ matrix.platform }}
+                  cache-from: type=gha,scope=${{ inputs.COMPONENT_NAME }}-${{ matrix.arch }}
+                  cache-to: type=gha,mode=max,scope=${{ inputs.COMPONENT_NAME }}-${{ matrix.arch }}
                   push: true
+
+    merge-images:
+        needs: [setup, build]
+        runs-on: ubuntu-latest
+        permissions:
+            id-token: write
+            packages: write
+            contents: read
+            attestations: write
+        steps:
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Login to Quay
+              uses: docker/login-action@v3
+              with:
+                  registry: quay.io
+                  username: ${{ secrets.QUAYIO_REGISTRY_USERNAME }}
+                  password: ${{ secrets.QUAYIO_REGISTRY_PASSWORD }}
+
+            - name: Create multi-arch manifest
+              id: merge
+              env:
+                  IMAGE: ${{ inputs.IMAGE_NAME }}
+                  TAG: ${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
+                  BUILD_MATRIX: ${{ needs.setup.outputs.BUILD_MATRIX }}
+              run: |
+                  SOURCES=$(echo "$BUILD_MATRIX" | jq -r --arg image "$IMAGE" --arg tag "$TAG" \
+                    '.include[] | "\($image):\($tag)-\(.arch)"' | tr '\n' ' ')
+                  docker buildx imagetools create -t "${IMAGE}:${TAG}" --metadata-file metadata.json $SOURCES
+                  echo "digest=$(jq -r '."containerimage.digest"' metadata.json)" >> "$GITHUB_OUTPUT"
 
             - name: Attest image provenance
               uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
               with:
                   subject-name: ${{ inputs.IMAGE_NAME }}
-                  subject-digest: ${{ steps.build.outputs.digest }}
+                  subject-digest: ${{ steps.merge.outputs.digest }}
                   push-to-registry: true
 
             - name: Install cosign
@@ -202,27 +270,20 @@ jobs:
                   COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY_V1 }}
               run: |
                   # Sign the image with keyless mode
-                  cosign sign -y ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+                  cosign sign -y ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
 
                   # Sign the image with key for verifier clients without keyless support
                   # Put the key from environment variable to a file
                   echo "$COSIGN_PRIVATE_KEY" > cosign.key
-                  printf "$COSIGN_PRIVATE_KEY_PASSWORD" | cosign sign -key cosign.key -y ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
+                  printf "%s" "$COSIGN_PRIVATE_KEY_PASSWORD" | cosign sign -key cosign.key -y ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
                   rm cosign.key
                   # Verify the image
                   echo "$COSIGN_PUBLIC_KEY" > cosign.pub
-                  cosign verify -key cosign.pub ${{ inputs.IMAGE_NAME }}:${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
-
-            - id: export_tests_to_env
-              name: set test name
-              run: |
-                  echo "TEST_NAMES=$input" >> $GITHUB_OUTPUT
-              env:
-                  input: ${{ inputs.REQUIRED_TESTS }}
+                  cosign verify -key cosign.pub ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
 
     run-tests:
-        needs: docker-build
-        if: ${{ needs.docker-build.outputs.TEST_NAMES != '' && toJson(fromJson(needs.docker-build.outputs.TEST_NAMES)) != '[]' }}
+        needs: [setup, merge-images]
+        if: ${{ needs.setup.outputs.TEST_NAMES != '' && toJson(fromJson(needs.setup.outputs.TEST_NAMES)) != '[]' }}
         runs-on: ubuntu-latest
         permissions:
             actions: read
@@ -250,7 +311,7 @@ jobs:
               env:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
                   CORRELATION_ID: ${{ steps.dispatch-info.outputs.correlation_id }}
-                  REQUIRED_TESTS: ${{ needs.docker-build.outputs.TEST_NAMES }}
+                  REQUIRED_TESTS: ${{ needs.setup.outputs.TEST_NAMES }}
               run: |
                   ADDITIONAL_TESTS=$(python3 - <<'PY'
                   import json, os
@@ -297,7 +358,7 @@ jobs:
                     -f "client_payload[in_cluster_chart_branch]=${{ inputs.HELM_BRANCH }}" \
                     -f "client_payload[ks_branch]=release" \
                     -f "client_payload[charts_repo]=kubescape/helm-charts" \
-                    -f "client_payload[component_image_tags]=${{ inputs.COMPONENT_NAME }}-tag=${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }}"
+                    -f "client_payload[component_image_tags]=${{ inputs.COMPONENT_NAME }}-tag=${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}"
 
                   echo "Dispatch completed"
 
@@ -433,7 +494,7 @@ jobs:
     create-release-and-retag:
         if: ${{ contains(github.event.pull_request.labels.*.name, 'release') && always() && contains(needs.*.result, 'success') && !(contains(needs.*.result, 'failure')) && !(contains (needs.*.result,'cancelled')) || inputs.FORCE }}
         name: Docker retag and create release
-        needs: [run-tests, docker-build]
+        needs: [setup, merge-images, run-tests]
         outputs:
             upload_url: ${{ steps.create_release.outputs.upload_url }}
         runs-on: ubuntu-latest
@@ -456,11 +517,11 @@ jobs:
                   chmod 755 regctl
 
                   if [ ${{ inputs.COSIGN }} = true ]; then
-                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }} --digest-tags
-                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest --digest-tags
+                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }} --digest-tags
+                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest --digest-tags
                   else
-                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
-                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest
+                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
+                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest
                   fi
 
             - name: Create Release
