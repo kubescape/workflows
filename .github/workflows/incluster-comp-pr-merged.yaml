@@ -125,13 +125,16 @@ jobs:
             TEST_NAMES: ${{ steps.export_tests_to_env.outputs.TEST_NAMES }}
             BUILD_AMD64: ${{ steps.platforms.outputs.BUILD_AMD64 }}
             BUILD_ARM64: ${{ steps.platforms.outputs.BUILD_ARM64 }}
+            BUILD_MATRIX: ${{ steps.platforms.outputs.BUILD_MATRIX }}
         permissions:
             contents: read
             pull-requests: read
         steps:
             - name: Set prerelease image tag
               id: image-prerelease-tag
-              run: echo "IMAGE_TAG_PRERELEASE=${{ inputs.IMAGE_TAG }}-prerelease" >> $GITHUB_OUTPUT
+              env:
+                  IMAGE_TAG: ${{ inputs.IMAGE_TAG }}
+              run: echo "IMAGE_TAG_PRERELEASE=${IMAGE_TAG}-prerelease" >> "$GITHUB_OUTPUT"
 
             - name: Validate and resolve build platforms
               id: platforms
@@ -152,12 +155,25 @@ jobs:
                   echo "BUILD_AMD64=$AMD64" >> "$GITHUB_OUTPUT"
                   echo "BUILD_ARM64=$ARM64" >> "$GITHUB_OUTPUT"
 
+                  MATRIX_INCLUDE="[]"
+                  if [ "$AMD64" = "true" ]; then
+                    MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. + [{"platform":"linux/amd64","arch":"amd64","runner":"ubuntu-large"}]')
+                  fi
+                  if [ "$ARM64" = "true" ]; then
+                    MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. + [{"platform":"linux/arm64","arch":"arm64","runner":"ubuntu-large-arm64"}]')
+                  fi
+                  echo "BUILD_MATRIX=$(jq -c -n --argjson include "$MATRIX_INCLUDE" '{"include":$include}')" >> "$GITHUB_OUTPUT"
+
             - id: export_tests_to_env
               name: set test name
-              run: |
-                  echo "TEST_NAMES=$input" >> $GITHUB_OUTPUT
               env:
                   input: ${{ inputs.REQUIRED_TESTS }}
+              run: |
+                  {
+                    echo 'TEST_NAMES<<EOF'
+                    echo "$input"
+                    echo 'EOF'
+                  } >> "$GITHUB_OUTPUT"
 
     unit-test:
         needs: setup
@@ -180,17 +196,9 @@ jobs:
 
     build:
         needs: [setup, unit-test]
-        if: ${{ (matrix.arch == 'amd64' && needs.setup.outputs.BUILD_AMD64 == 'true') || (matrix.arch == 'arm64' && needs.setup.outputs.BUILD_ARM64 == 'true') }}
         strategy:
             fail-fast: false
-            matrix:
-                include:
-                    - platform: linux/amd64
-                      arch: amd64
-                      runner: ubuntu-large
-                    - platform: linux/arm64
-                      arch: arm64
-                      runner: ubuntu-large-arm64
+            matrix: ${{ fromJson(needs.setup.outputs.BUILD_MATRIX) }}
         runs-on: ${{ matrix.runner }}
         permissions:
             actions: write
@@ -287,7 +295,7 @@ jobs:
                   # Sign the image with key for verifier clients without keyless support
                   # Put the key from environment variable to a file
                   echo "$COSIGN_PRIVATE_KEY" > cosign.key
-                  printf "$COSIGN_PRIVATE_KEY_PASSWORD" | cosign sign -key cosign.key -y ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
+                  printf "%s" "$COSIGN_PRIVATE_KEY_PASSWORD" | cosign sign -key cosign.key -y ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
                   rm cosign.key
                   # Verify the image
                   echo "$COSIGN_PUBLIC_KEY" > cosign.pub
@@ -524,16 +532,20 @@ jobs:
                   password: ${{ secrets.QUAYIO_REGISTRY_PASSWORD }}
 
             - name: Docker retag
+              env:
+                  IMAGE_NAME: ${{ inputs.IMAGE_NAME }}
+                  TAG_PRERELEASE: ${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
+                  TAG: ${{ inputs.IMAGE_TAG }}
               run: |
                   curl -L https://github.com/regclient/regclient/releases/download/v0.4.4/regctl-linux-amd64 >regctl
                   chmod 755 regctl
 
                   if [ ${{ inputs.COSIGN }} = true ]; then
-                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }} --digest-tags
-                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest --digest-tags
+                    ./regctl image copy "${IMAGE_NAME}:${TAG_PRERELEASE}" "${IMAGE_NAME}:${TAG}" --digest-tags
+                    ./regctl image copy "${IMAGE_NAME}:${TAG_PRERELEASE}" "${IMAGE_NAME}:latest" --digest-tags
                   else
-                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
-                    ./regctl image copy ${{ inputs.IMAGE_NAME }}:${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }} ${{ inputs.IMAGE_NAME }}:latest
+                    ./regctl image copy "${IMAGE_NAME}:${TAG_PRERELEASE}" "${IMAGE_NAME}:${TAG}"
+                    ./regctl image copy "${IMAGE_NAME}:${TAG_PRERELEASE}" "${IMAGE_NAME}:latest"
                   fi
 
             - name: Create Release
