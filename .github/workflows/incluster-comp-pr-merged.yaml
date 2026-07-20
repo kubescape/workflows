@@ -123,6 +123,8 @@ jobs:
         outputs:
             IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
             TEST_NAMES: ${{ steps.export_tests_to_env.outputs.TEST_NAMES }}
+            BUILD_AMD64: ${{ steps.platforms.outputs.BUILD_AMD64 }}
+            BUILD_ARM64: ${{ steps.platforms.outputs.BUILD_ARM64 }}
         permissions:
             contents: read
             pull-requests: read
@@ -130,6 +132,25 @@ jobs:
             - name: Set prerelease image tag
               id: image-prerelease-tag
               run: echo "IMAGE_TAG_PRERELEASE=${{ inputs.IMAGE_TAG }}-prerelease" >> $GITHUB_OUTPUT
+
+            - name: Validate and resolve build platforms
+              id: platforms
+              env:
+                  BUILD_PLATFORM: ${{ inputs.BUILD_PLATFORM }}
+              run: |
+                  AMD64=false
+                  ARM64=false
+                  case "$BUILD_PLATFORM" in
+                    linux/amd64) AMD64=true ;;
+                    linux/arm64) ARM64=true ;;
+                    linux/amd64,linux/arm64|linux/arm64,linux/amd64) AMD64=true; ARM64=true ;;
+                    *)
+                      echo "::error::Unsupported BUILD_PLATFORM '$BUILD_PLATFORM' — expected one of: linux/amd64, linux/arm64, linux/amd64,linux/arm64"
+                      exit 1
+                      ;;
+                  esac
+                  echo "BUILD_AMD64=$AMD64" >> "$GITHUB_OUTPUT"
+                  echo "BUILD_ARM64=$ARM64" >> "$GITHUB_OUTPUT"
 
             - id: export_tests_to_env
               name: set test name
@@ -159,7 +180,7 @@ jobs:
 
     build:
         needs: [setup, unit-test]
-        if: ${{ matrix.arch == 'amd64' || contains(inputs.BUILD_PLATFORM, 'arm64') }}
+        if: ${{ (matrix.arch == 'amd64' && needs.setup.outputs.BUILD_AMD64 == 'true') || (matrix.arch == 'arm64' && needs.setup.outputs.BUILD_ARM64 == 'true') }}
         strategy:
             fail-fast: false
             matrix:
@@ -227,10 +248,14 @@ jobs:
               env:
                   IMAGE: ${{ inputs.IMAGE_NAME }}
                   TAG: ${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
-                  BUILD_PLATFORM: ${{ inputs.BUILD_PLATFORM }}
+                  BUILD_AMD64: ${{ needs.setup.outputs.BUILD_AMD64 }}
+                  BUILD_ARM64: ${{ needs.setup.outputs.BUILD_ARM64 }}
               run: |
-                  SOURCES="${IMAGE}:${TAG}-amd64"
-                  if echo "$BUILD_PLATFORM" | grep -q arm64; then
+                  SOURCES=""
+                  if [ "$BUILD_AMD64" = "true" ]; then
+                    SOURCES="$SOURCES ${IMAGE}:${TAG}-amd64"
+                  fi
+                  if [ "$BUILD_ARM64" = "true" ]; then
                     SOURCES="$SOURCES ${IMAGE}:${TAG}-arm64"
                   fi
                   docker buildx imagetools create -t "${IMAGE}:${TAG}" --metadata-file metadata.json $SOURCES
