@@ -123,8 +123,6 @@ jobs:
         outputs:
             IMAGE_TAG_PRERELEASE: ${{ steps.image-prerelease-tag.outputs.IMAGE_TAG_PRERELEASE }}
             TEST_NAMES: ${{ steps.export_tests_to_env.outputs.TEST_NAMES }}
-            BUILD_AMD64: ${{ steps.platforms.outputs.BUILD_AMD64 }}
-            BUILD_ARM64: ${{ steps.platforms.outputs.BUILD_ARM64 }}
             BUILD_MATRIX: ${{ steps.platforms.outputs.BUILD_MATRIX }}
         permissions:
             contents: read
@@ -136,33 +134,27 @@ jobs:
                   IMAGE_TAG: ${{ inputs.IMAGE_TAG }}
               run: echo "IMAGE_TAG_PRERELEASE=${IMAGE_TAG}-prerelease" >> "$GITHUB_OUTPUT"
 
-            - name: Validate and resolve build platforms
+            - name: Build platform matrix
               id: platforms
               env:
                   BUILD_PLATFORM: ${{ inputs.BUILD_PLATFORM }}
               run: |
-                  AMD64=false
-                  ARM64=false
-                  case "$BUILD_PLATFORM" in
-                    linux/amd64) AMD64=true ;;
-                    linux/arm64) ARM64=true ;;
-                    linux/amd64,linux/arm64|linux/arm64,linux/amd64) AMD64=true; ARM64=true ;;
-                    *)
-                      echo "::error::Unsupported BUILD_PLATFORM '$BUILD_PLATFORM' — expected one of: linux/amd64, linux/arm64, linux/amd64,linux/arm64"
-                      exit 1
-                      ;;
-                  esac
-                  echo "BUILD_AMD64=$AMD64" >> "$GITHUB_OUTPUT"
-                  echo "BUILD_ARM64=$ARM64" >> "$GITHUB_OUTPUT"
-
-                  MATRIX_INCLUDE="[]"
-                  if [ "$AMD64" = "true" ]; then
-                    MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. + [{"platform":"linux/amd64","arch":"amd64","runner":"ubuntu-large"}]')
-                  fi
-                  if [ "$ARM64" = "true" ]; then
-                    MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. + [{"platform":"linux/arm64","arch":"arm64","runner":"ubuntu-large-arm64"}]')
-                  fi
-                  echo "BUILD_MATRIX=$(jq -c -n --argjson include "$MATRIX_INCLUDE" '{"include":$include}')" >> "$GITHUB_OUTPUT"
+                  INCLUDE="[]"
+                  IFS=',' read -ra PLATFORMS <<< "$BUILD_PLATFORM"
+                  for PLATFORM in "${PLATFORMS[@]}"; do
+                    ARCH="${PLATFORM##*/}"
+                    case "$ARCH" in
+                      amd64) RUNNER=ubuntu-large ;;
+                      arm64) RUNNER=ubuntu-large-arm64 ;;
+                      *)
+                        echo "::error::Unsupported platform '$PLATFORM' in BUILD_PLATFORM — expected linux/amd64 and/or linux/arm64"
+                        exit 1
+                        ;;
+                    esac
+                    INCLUDE=$(echo "$INCLUDE" | jq -c --arg platform "$PLATFORM" --arg arch "$ARCH" --arg runner "$RUNNER" \
+                      '. + [{"platform":$platform,"arch":$arch,"runner":$runner}]')
+                  done
+                  echo "BUILD_MATRIX=$(jq -c -n --argjson include "$INCLUDE" '{"include":$include}')" >> "$GITHUB_OUTPUT"
 
             - id: export_tests_to_env
               name: set test name
@@ -256,16 +248,10 @@ jobs:
               env:
                   IMAGE: ${{ inputs.IMAGE_NAME }}
                   TAG: ${{ needs.setup.outputs.IMAGE_TAG_PRERELEASE }}
-                  BUILD_AMD64: ${{ needs.setup.outputs.BUILD_AMD64 }}
-                  BUILD_ARM64: ${{ needs.setup.outputs.BUILD_ARM64 }}
+                  BUILD_MATRIX: ${{ needs.setup.outputs.BUILD_MATRIX }}
               run: |
-                  SOURCES=""
-                  if [ "$BUILD_AMD64" = "true" ]; then
-                    SOURCES="$SOURCES ${IMAGE}:${TAG}-amd64"
-                  fi
-                  if [ "$BUILD_ARM64" = "true" ]; then
-                    SOURCES="$SOURCES ${IMAGE}:${TAG}-arm64"
-                  fi
+                  SOURCES=$(echo "$BUILD_MATRIX" | jq -r --arg image "$IMAGE" --arg tag "$TAG" \
+                    '.include[] | "\($image):\($tag)-\(.arch)"' | tr '\n' ' ')
                   docker buildx imagetools create -t "${IMAGE}:${TAG}" --metadata-file metadata.json $SOURCES
                   echo "digest=$(jq -r '."containerimage.digest"' metadata.json)" >> "$GITHUB_OUTPUT"
 
