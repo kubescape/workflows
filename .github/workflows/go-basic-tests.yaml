@@ -160,7 +160,7 @@ jobs:
 
     - name: Test go linting
       continue-on-error: true  # TODO: Should be removed
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v9
       id: linting
       with:
         version: latest
