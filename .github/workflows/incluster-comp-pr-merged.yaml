@@ -285,6 +285,20 @@ jobs:
                   echo "Dispatching E2E tests with correlation_id: ${CORRELATION_ID}"
                   echo "Using tests group: ${TESTS_GROUP}"
 
+                  # Only components actually built into the kubescape-operator chart have a
+                  # "<name>-tag" helm value to override. Sending one for any other component
+                  # (e.g. http-request, prometheus-exporter) makes armosec/system-tests reject
+                  # the dispatch as an unrecognised override.
+                  COMPONENT_TAG_ARGS=()
+                  case "${{ inputs.COMPONENT_NAME }}" in
+                    kubescape|operator|kubevuln|kollector|gateway|storage|nodeAgent)
+                      COMPONENT_TAG_ARGS=(-f "client_payload[component_image_tags]=${{ inputs.COMPONENT_NAME }}-tag=${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }}")
+                      ;;
+                    *)
+                      echo "Component '${{ inputs.COMPONENT_NAME }}' is not part of the kubescape-operator chart; skipping component_image_tags override"
+                      ;;
+                  esac
+
                   gh api "repos/armosec/shared-workflows/dispatches" \
                     -f event_type="e2e-test-trigger" \
                     -f "client_payload[correlation_id]=${CORRELATION_ID}" \
@@ -296,7 +310,7 @@ jobs:
                     -f "client_payload[in_cluster_chart_branch]=${{ inputs.HELM_BRANCH }}" \
                     -f "client_payload[ks_branch]=release" \
                     -f "client_payload[charts_repo]=kubescape/helm-charts" \
-                    -f "client_payload[component_image_tags]=${{ inputs.COMPONENT_NAME }}-tag=${{ needs.docker-build.outputs.IMAGE_TAG_PRERELEASE }}"
+                    "${COMPONENT_TAG_ARGS[@]}"
 
                   echo "Dispatch completed"
 
