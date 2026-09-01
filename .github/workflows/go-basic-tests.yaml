@@ -74,7 +74,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-      CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
     # strategy:
     #   matrix:
     #     os: ${{ fromJSON(needs.Setup-Environment.outputs.matrix) }}
@@ -89,12 +88,7 @@ jobs:
           go-version: '${{ inputs.GO_VERSION }}'
 
       - name: Test race conditions
-        if: ${{ env.CGO_ENABLED == 1 }}
         run: go test -v -race $(go list ${{ inputs.UNIT_TESTS_PATH }} | grep -v /e2e)
-
-      - name: Test without race conditions
-        if: ${{ env.CGO_ENABLED != 1 }}
-        run: go test -v $(go list ${{ inputs.UNIT_TESTS_PATH }} | grep -v /e2e)
 
       - name: Initialize CodeQL
         continue-on-error: true
