@@ -84,7 +84,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-      CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
     # strategy:
     #   matrix:
     #     os: ${{ fromJSON(needs.Setup-Environment.outputs.matrix) }}
@@ -127,7 +126,7 @@ jobs:
           fi
           if [[ ${TEST_COVERAGE:-false} == true ]]; then
             args+=(-covermode=count -coverprofile=coverage.out)
-          elif [[ $CGO_ENABLED == 1 ]]; then
+          else
             args+=(-race)
           fi
 
@@ -227,7 +226,6 @@ jobs:
           path: ${{ steps.unit-test.outputs.results_dir }}
           retention-days: 7
           if-no-files-found: error
-
       - name: Initialize CodeQL
         continue-on-error: true
         uses: github/codeql-action/init@v3
