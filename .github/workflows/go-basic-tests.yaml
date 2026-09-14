@@ -21,6 +21,16 @@ on:
         required: false
         type: string
         default: "./..."
+      TEST_PARALLELISM:
+        description: Maximum parallel Go tests per package; 0 keeps the Go default
+        required: false
+        type: number
+        default: 0
+      TEST_PACKAGE_PARALLELISM:
+        description: Maximum concurrent Go test/build packages; 0 keeps the Go default
+        required: false
+        type: number
+        default: 0
       FAILEDTHRESHOLD:
         required: false
         type: number
@@ -88,13 +98,135 @@ jobs:
         with:
           go-version: '${{ inputs.GO_VERSION }}'
 
-      - name: Test race conditions
-        if: ${{ env.CGO_ENABLED == 1 }}
-        run: go test -v -race $(go list ${{ inputs.UNIT_TESTS_PATH }} | grep -v /e2e)
+      - &go_tests
+        name: Test Go packages
+        id: unit-test
+        shell: bash
+        env:
+          UNIT_TESTS_PATH: ${{ inputs.UNIT_TESTS_PATH }}
+          TEST_PARALLELISM: ${{ inputs.TEST_PARALLELISM || 0 }}
+          TEST_PACKAGE_PARALLELISM: ${{ inputs.TEST_PACKAGE_PARALLELISM || 0 }}
+        run: |
+          set -euo pipefail
+          results_dir=$(mktemp -d "$RUNNER_TEMP/go-tests-${GITHUB_JOB}.XXXXXX")
+          printf 'results_dir=%s\nartifact_name=%s\n' "$results_dir" "${results_dir##*/}" >> "$GITHUB_OUTPUT"
 
-      - name: Test without race conditions
-        if: ${{ env.CGO_ENABLED != 1 }}
-        run: go test -v $(go list ${{ inputs.UNIT_TESTS_PATH }} | grep -v /e2e)
+          args=(-json -count=1)
+          for setting in TEST_PARALLELISM TEST_PACKAGE_PARALLELISM; do
+            value=${!setting}
+            if [[ ! $value =~ ^(0|[1-9][0-9]*)$ ]]; then
+              printf '%s must be a non-negative integer\n' "$setting" | tee "$results_dir/setup.stderr" >&2
+              exit 1
+            fi
+          done
+          if [[ $TEST_PARALLELISM != 0 ]]; then
+            args+=(-parallel "$TEST_PARALLELISM")
+          fi
+          if [[ $TEST_PACKAGE_PARALLELISM != 0 ]]; then
+            args+=(-p "$TEST_PACKAGE_PARALLELISM")
+          fi
+          if [[ ${TEST_COVERAGE:-false} == true ]]; then
+            args+=(-covermode=count -coverprofile=coverage.out)
+          elif [[ $CGO_ENABLED == 1 ]]; then
+            args+=(-race)
+          fi
+
+          read -r -a patterns <<< "${UNIT_TESTS_PATH//$'\n'/ }"
+          go list "${patterns[@]}" > "$results_dir/packages.txt" 2> "$results_dir/list.stderr"
+          mapfile -t packages < <(grep -v /e2e "$results_dir/packages.txt")
+          if (( ${#packages[@]} == 0 )); then
+            printf 'No unit-test packages selected\n' | tee "$results_dir/setup.stderr" >&2
+            exit 1
+          fi
+          # pipefail retains the test exit status even when tee succeeds.
+          go test "${args[@]}" "${packages[@]}" 2> "$results_dir/test.stderr" | tee "$results_dir/tests.jsonl"
+
+      - &go_test_summary
+        name: Summarize Go test results
+        if: ${{ always() && steps.unit-test.outputs.results_dir != '' }}
+        shell: bash
+        env:
+          TEST_RESULTS_DIR: ${{ steps.unit-test.outputs.results_dir }}
+          TEST_OUTCOME: ${{ steps.unit-test.outcome }}
+        run: |
+          python3 - <<'PYTHON'
+          import collections
+          import html
+          import json
+          import os
+          from pathlib import Path
+
+          results = Path(os.environ["TEST_RESULTS_DIR"])
+          failed = set()
+          output = collections.defaultdict(lambda: collections.deque(maxlen=40))
+          malformed = 0
+          with (results / "tests.log").open("w") as readable:
+              json_log = results / "tests.jsonl"
+              if json_log.exists():
+                  with json_log.open(errors="replace") as events:
+                      for line in events:
+                          try:
+                              event = json.loads(line)
+                          except json.JSONDecodeError:
+                              malformed += 1
+                              readable.write(line)
+                              continue
+                          # Go interleaves BuildEvents (ImportPath)
+                          # with TestEvents (Package) in the JSON stream.
+                          package = event.get("Package") or event.get("ImportPath", "unknown package")
+                          key = (package, event.get("Test", ""))
+                          if event.get("Action") in ("fail", "build-fail"):
+                              failed.add(key)
+                          text = event.get("Output", "")
+                          readable.write(text)
+                          output[key].extend(text.splitlines())
+
+          status = os.environ["TEST_OUTCOME"]
+          parts = [f"## Go tests: {html.escape(status)}\n",
+                   "Full JSON, readable output, and stderr are attached as a job artifact.\n"]
+          if failed:
+              parts.append("### Failed tests and packages\n")
+              for package, test in sorted(failed):
+                  label = package + (" / " + test if test else " (package)")
+                  parts.append(f"- {html.escape(label)}\n")
+              # Named failures already include package context. Show package-level
+              # output when a build, panic, or TestMain failure has no named test.
+              named_packages = {package for package, test in failed if test}
+              for key in sorted(failed):
+                  package, test = key
+                  if not test and package in named_packages:
+                      continue
+                  label = package + (" / " + test if test else " (package)")
+                  excerpt = "\n".join(output[key])[-6000:]
+                  parts.append(f"\n<details><summary>{html.escape(label)}</summary>\n\n"
+                               f"<pre>{html.escape(excerpt)}</pre>\n</details>\n")
+          elif status != "success":
+              parts.append("No named test failure was recorded. Check setup/build stderr and the artifact.\n")
+          if malformed:
+              parts.append(f"\n{malformed} non-JSON or incomplete lines retained in tests.log.\n")
+          for name in ("setup.stderr", "list.stderr", "test.stderr"):
+              path = results / name
+              if path.exists() and path.stat().st_size:
+                  with path.open(errors="replace") as stream:
+                      tail = "".join(collections.deque(stream, maxlen=40))[-6000:]
+                  parts.append(f"\n### {name}\n<pre>{html.escape(tail)}</pre>\n")
+          # Leave ample room below GitHub's 1 MiB per-step summary limit.
+          summary = "".join(parts)
+          if len(summary) > 60000:
+              summary = summary[:60000] + "\n\nSummary truncated; consult the complete artifact.\n"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+              stream.write(summary)
+          PYTHON
+
+      - &go_test_artifact
+        name: Upload Go test results
+        if: ${{ always() && steps.unit-test.outputs.results_dir != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.unit-test.outputs.artifact_name }}
+          path: ${{ steps.unit-test.outputs.results_dir }}
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Initialize CodeQL
         continue-on-error: true
@@ -115,6 +247,7 @@ jobs:
 
   Basic-Test:
     env:
+      TEST_COVERAGE: true
       GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
@@ -167,9 +300,9 @@ jobs:
         args: --timeout 10m
         only-new-issues: true
 
-    - name: Test coverage
-      id: unit-test
-      run: go test -v $(go list ${{ inputs.UNIT_TESTS_PATH }} | grep -v /e2e) -covermode=count -coverprofile=coverage.out
+    - *go_tests
+    - *go_test_summary
+    - *go_test_artifact
 
     - name: Comment results to PR
       uses: peter-evans/create-or-update-comment@v4
