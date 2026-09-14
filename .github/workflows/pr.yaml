@@ -7,6 +7,18 @@ on:
       - '**.md' ### Ignore running when .md files change
 
 jobs:
+  validate-go-test-reporting:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Exercise test failure reporting
+        run: python3 -m unittest discover -s tests -v
+
   validate-go-basic-tests-file:
     permissions:
       pull-requests: write
