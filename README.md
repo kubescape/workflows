@@ -77,3 +77,49 @@ Here's the list of reusable workflows available from this repository:
 | **Name**            | **Variables**                                                | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | `sanity-check.yaml` | - GH_RUNNER: define the runner to use on the workflow. Default: `ubuntu-latest`</br>- `SYSTEM_TESTS_BRANCH`: define alternative branch to clone for [system-tests](github.com/armosec/system-tests) repository. Default: `master`</br>- `BINARY_TESTS`: specify which tests are going to be executed by the workflow. | This workflow allow you to run **system-tests** in the **production** environment |
+
+## Go test diagnostics and concurrency
+
+`go-basic-tests.yaml` captures each unit-test and coverage run as a separate
+`go-tests-<job>-<unique suffix>` artifact, retained for seven days. It contains:
+
+- `tests.jsonl`: the complete `go test -json` event stream.
+- `tests.log`: readable output reconstructed from those events.
+- `test.stderr`, `list.stderr`, and `packages.txt`: compiler/tool diagnostics
+  and the selected package list. Setup errors also produce `setup.stderr`.
+
+The job summary lists failed tests and packages with bounded output excerpts.
+Summary and artifact steps run after test failure. A nonzero `go test` or
+`go list` exit still fails the job; there are no automatic retries. Tests use
+`-count=1` so every run executes them. Existing race and coverage modes are
+preserved, as is the exclusion of `/e2e` packages.
+
+Both `go-basic-tests.yaml` and `incluster-comp-pr-created.yaml` accept two
+optional numeric inputs:
+
+| Input | Meaning | Default |
+| --- | --- | --- |
+| `TEST_PARALLELISM` | Go `-parallel`: simultaneous parallel tests within each package | `0` (Go default) |
+| `TEST_PACKAGE_PARALLELISM` | Go `-p`: concurrent package test/build processes | `0` (Go default) |
+
+For example, a caller can reduce competition for CPU and disk:
+
+```yaml
+jobs:
+  pr-created:
+    uses: kubescape/workflows/.github/workflows/incluster-comp-pr-created.yaml@main
+    with:
+      GO_VERSION: "1.25"
+      CGO_ENABLED: 0
+      TEST_PARALLELISM: 4
+      TEST_PACKAGE_PARALLELISM: 2
+    secrets: inherit
+```
+
+Zero preserves Go's default; negative and fractional values fail validation.
+These limits do not make wall-clock assertions deterministic. Tests of
+concurrency correctness should synchronize on the events they need to observe;
+strict latency checks need a separate performance test with controlled load.
+
+The reporting regression harness uses Python's standard library and local Go
+fixtures: `python3 -m unittest discover -s tests -v`.
