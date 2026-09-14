@@ -48,7 +48,7 @@ class GoWorkflowTests(unittest.TestCase):
         self.env = dict(os.environ, RUNNER_TEMP=str(self.root), GITHUB_JOB="test",
                         GITHUB_OUTPUT=str(self.root / "outputs"),
                         GITHUB_STEP_SUMMARY=str(self.root / "summary"),
-                        CGO_ENABLED="0", UNIT_TESTS_PATH="./...",
+                        UNIT_TESTS_PATH="./...",
                         TEST_PARALLELISM="0", TEST_PACKAGE_PARALLELISM="0",
                         TEST_COVERAGE="false", GOPROXY="off", GOSUMDB="off",
                         GOTOOLCHAIN="local", GOFLAGS="", GOWORK="off")
@@ -128,11 +128,11 @@ class GoWorkflowTests(unittest.TestCase):
 
     def test_flags_and_package_filtering(self):
         self.fake_go()
-        for coverage, cgo, parallel, package_parallel in (
-                ("false", "1", "2", "3"), ("true", "1", "0", "0"),
-                ("false", "0", "0", "0")):
-            with self.subTest(coverage=coverage, cgo=cgo):
-                self.env.update(TEST_COVERAGE=coverage, CGO_ENABLED=cgo,
+        for coverage, parallel, package_parallel in (
+                ("false", "2", "3"), ("true", "0", "0"),
+                ("false", "0", "0")):
+            with self.subTest(coverage=coverage, parallel=parallel):
+                self.env.update(TEST_COVERAGE=coverage,
                                 TEST_PARALLELISM=parallel,
                                 TEST_PACKAGE_PARALLELISM=package_parallel,
                                 UNIT_TESTS_PATH="./pkg/...\n./internal/... ./literal-$(touch-INJECTED)/*")
@@ -146,7 +146,7 @@ class GoWorkflowTests(unittest.TestCase):
                     expected += ["-parallel", parallel, "-p", package_parallel]
                 if coverage == "true":
                     expected += ["-covermode=count", "-coverprofile=coverage.out"]
-                elif cgo == "1":
+                else:
                     expected += ["-race"]
                 self.assertEqual(calls[-1], expected + ["example.com/ci"])
 
