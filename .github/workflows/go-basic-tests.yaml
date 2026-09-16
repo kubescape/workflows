@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: "./..."
+      TEST_TIMEOUT_MINUTES:
+        description: Per-package Go test timeout in minutes; must be a positive integer
+        required: false
+        type: number
+        default: 10
       TEST_PARALLELISM:
         description: Maximum parallel Go tests per package; 0 keeps the Go default
         required: false
@@ -103,6 +108,7 @@ jobs:
         shell: bash
         env:
           UNIT_TESTS_PATH: ${{ inputs.UNIT_TESTS_PATH }}
+          TEST_TIMEOUT_MINUTES: ${{ inputs.TEST_TIMEOUT_MINUTES }}
           TEST_PARALLELISM: ${{ inputs.TEST_PARALLELISM || 0 }}
           TEST_PACKAGE_PARALLELISM: ${{ inputs.TEST_PACKAGE_PARALLELISM || 0 }}
         run: |
@@ -110,7 +116,11 @@ jobs:
           results_dir=$(mktemp -d "$RUNNER_TEMP/go-tests-${GITHUB_JOB}.XXXXXX")
           printf 'results_dir=%s\nartifact_name=%s\n' "$results_dir" "${results_dir##*/}" >> "$GITHUB_OUTPUT"
 
-          args=(-json -count=1)
+          if [[ ! $TEST_TIMEOUT_MINUTES =~ ^[1-9][0-9]*$ ]]; then
+            printf 'TEST_TIMEOUT_MINUTES must be a positive integer\n' | tee "$results_dir/setup.stderr" >&2
+            exit 1
+          fi
+          args=(-json -count=1 -timeout "${TEST_TIMEOUT_MINUTES}m")
           for setting in TEST_PARALLELISM TEST_PACKAGE_PARALLELISM; do
             value=${!setting}
             if [[ ! $value =~ ^(0|[1-9][0-9]*)$ ]]; then
