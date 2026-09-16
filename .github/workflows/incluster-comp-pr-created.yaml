@@ -29,6 +29,11 @@ on:
         required: false
         type: string
         default: "./..."
+      TEST_TIMEOUT_MINUTES:
+        description: Per-package Go test timeout in minutes; must be a positive integer
+        required: false
+        type: number
+        default: 10
       TEST_PARALLELISM:
         description: Maximum parallel Go tests per package; 0 keeps the Go default
         required: false
@@ -61,6 +66,7 @@ jobs:
       CGO_ENABLED: ${{ inputs.CGO_ENABLED }}
       UNIT_TESTS_PATH: ${{ inputs.UNIT_TESTS_PATH }}
       BUILD_PATH: ${{ inputs.BUILD_PATH }}
+      TEST_TIMEOUT_MINUTES: ${{ inputs.TEST_TIMEOUT_MINUTES }}
       TEST_PARALLELISM: ${{ inputs.TEST_PARALLELISM || 0 }}
       TEST_PACKAGE_PARALLELISM: ${{ inputs.TEST_PACKAGE_PARALLELISM || 0 }}
       # TEST_MULTI_ENVIRONMENTS: ${{ inputs.TEST_MULTI_ENVIRONMENTS }}

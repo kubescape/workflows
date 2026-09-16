@@ -50,7 +50,7 @@ class GoWorkflowTests(unittest.TestCase):
                         GITHUB_STEP_SUMMARY=str(self.root / "summary"),
                         UNIT_TESTS_PATH="./...",
                         TEST_PARALLELISM="0", TEST_PACKAGE_PARALLELISM="0",
-                        TEST_COVERAGE="false", GOPROXY="off", GOSUMDB="off",
+                        TEST_TIMEOUT_MINUTES="10", TEST_COVERAGE="false", GOPROXY="off", GOSUMDB="off",
                         GOTOOLCHAIN="local", GOFLAGS="", GOWORK="off")
 
     def shell(self, anchor):
@@ -141,7 +141,7 @@ class GoWorkflowTests(unittest.TestCase):
                 calls = [json.loads(line) for line in (self.root / "calls").read_text().splitlines()]
                 self.assertEqual(calls[-2], ["list", "./pkg/...", "./internal/...",
                                              "./literal-$(touch-INJECTED)/*"])
-                expected = ["test", "-json", "-count=1"]
+                expected = ["test", "-json", "-count=1", "-timeout", "10m"]
                 if parallel != "0":
                     expected += ["-parallel", parallel, "-p", package_parallel]
                 if coverage == "true":
@@ -149,6 +149,32 @@ class GoWorkflowTests(unittest.TestCase):
                 else:
                     expected += ["-race"]
                 self.assertEqual(calls[-1], expected + ["example.com/ci"])
+
+    def test_timeout_wrapper_preserves_input_for_validation(self):
+        wrapper = WORKFLOW.with_name("incluster-comp-pr-created.yaml").read_text()
+        self.assertIn("TEST_TIMEOUT_MINUTES: ${{ inputs.TEST_TIMEOUT_MINUTES }}", wrapper)
+        self.assertNotIn("inputs.TEST_TIMEOUT_MINUTES ||", wrapper)
+
+    def test_custom_timeout_in_both_modes(self):
+        self.fake_go()
+        for coverage in ("false", "true"):
+            with self.subTest(coverage=coverage):
+                self.env.update(TEST_TIMEOUT_MINUTES="30", TEST_COVERAGE=coverage)
+                result, _ = self.execute()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                calls = [json.loads(line) for line in (self.root / "calls").read_text().splitlines()]
+                self.assertEqual(calls[-1][3:5], ["-timeout", "30m"])
+
+    def test_invalid_timeout_fails_before_go(self):
+        self.fake_go()
+        for value in ("0", "-1", "1.5", "abc", "", "$(touch INJECTED)"):
+            with self.subTest(value=value):
+                self.env["TEST_TIMEOUT_MINUTES"] = value
+                result, summary = self.execute()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("TEST_TIMEOUT_MINUTES must be a positive integer", summary)
+                self.assertFalse((self.root / "calls").exists())
+                self.assertFalse((self.module / "INJECTED").exists())
 
     def test_invalid_parallelism_fails_before_go(self):
         self.fake_go()

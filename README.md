@@ -123,3 +123,9 @@ strict latency checks need a separate performance test with controlled load.
 
 The reporting regression harness uses Python's standard library and local Go
 fixtures: `python3 -m unittest discover -s tests -v`.
+
+`TEST_TIMEOUT_MINUTES` sets Go's per-package test timeout for both race and
+coverage runs. It defaults to `10`, preserving Go's default budget; callers
+with large migration or integration suites can set `30`. It must be a positive
+integer. This limits test execution, not compilation or the whole workflow,
+and does not change race detection or assertions inside tests.
