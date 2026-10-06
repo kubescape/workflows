@@ -320,7 +320,9 @@ jobs:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
                   CORRELATION_ID: ${{ steps.dispatch-info.outputs.correlation_id }}
               run: |
-                  for i in {1..15}; do
+                  # The App token can see a new dispatch run several minutes after it is created
+                  # (measured ~5.5 min on 2026-10-06), so poll for ~16 min, not ~6.
+                  for i in {1..35}; do
                     run_id=$(gh api "repos/armosec/shared-workflows/actions/runs?event=repository_dispatch&per_page=30" \
                       --jq '.workflow_runs | map(select(.name | contains("'"$CORRELATION_ID"'"))) | first | .id // empty')
 
