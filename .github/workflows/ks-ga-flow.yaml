@@ -20,7 +20,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
     - uses: kubescape/github-action@3a6f7f454062cf0771e95e2c6e308defd94f35e6 # main
       continue-on-error: true
       with:
