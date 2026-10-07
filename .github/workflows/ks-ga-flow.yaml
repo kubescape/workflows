@@ -20,8 +20,8 @@ jobs:
       contents: read
       security-events: write
     steps:
-    - uses: actions/checkout@v4
-    - uses: kubescape/github-action@main
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+    - uses: kubescape/github-action@3a6f7f454062cf0771e95e2c6e308defd94f35e6 # main
       continue-on-error: true
       with:
         format: sarif
@@ -32,7 +32,7 @@ jobs:
         frameworks: ${{ inputs.FRAMEWORKS }}
         #   failedThreshold: ${{ inputs.FAILEDTHRESHOLD }}
     - name: Upload Kubescape scan results to Github Code Scanning
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@b8d3b6e8af63cde30bdc382c0bc28114f4346c88 # v2.28.1
       continue-on-error: true
       with:
         sarif_file: results.sarif
