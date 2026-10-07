@@ -114,6 +114,11 @@ jobs:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
                   CORRELATION_ID: ${{ steps.dispatch-info.outputs.correlation_id }}
                   REQUIRED_TESTS: ${{ needs.wf-preparation.outputs.TEST_NAMES }}
+                  SOURCE_RUN_ID: ${{ github.run_id }}
+                  ARTIFACT_KEY_NAME: ${{ inputs.DOWNLOAD_ARTIFACT_KEY_NAME }}
+                  ARTIFACT_PATH: ${{ inputs.DOWNLOAD_ARTIFACT_PATH }}
+                  USE_ARTIFACTS_FILE: ${{ inputs.USE_ARTIFACTS_FILE }}
+                  SYSTEM_TESTS_BRANCH: ${{ inputs.SYSTEM_TESTS_BRANCH }}
               run: |
                   ADDITIONAL_TESTS=$(python3 - <<'PY'
                   import json, os
@@ -132,10 +137,10 @@ jobs:
 
                   SOURCE_ARTIFACT=$(jq -cn \
                     --arg repo "${GITHUB_REPOSITORY}" \
-                    --arg run_id "${{ github.run_id }}" \
-                    --arg name "${{ inputs.DOWNLOAD_ARTIFACT_KEY_NAME }}" \
-                    --arg path "${{ inputs.DOWNLOAD_ARTIFACT_PATH }}" \
-                    --arg use_file "${{ inputs.USE_ARTIFACTS_FILE }}" \
+                    --arg run_id "${SOURCE_RUN_ID}" \
+                    --arg name "${ARTIFACT_KEY_NAME}" \
+                    --arg path "${ARTIFACT_PATH}" \
+                    --arg use_file "${USE_ARTIFACTS_FILE}" \
                     '{repo: $repo, run_id: $run_id, name: $name, path: $path, use_file: $use_file}')
 
                   RESPONSE=$(gh api --method POST "repos/armosec/shared-workflows/actions/workflows/helm-e2e-receiver.yaml/dispatches" \
@@ -146,7 +151,7 @@ jobs:
                     -f "inputs[environment]=production" \
                     -f "inputs[tests_groups]=${TESTS_GROUP}" \
                     -f "inputs[additional_tests]=${ADDITIONAL_TESTS}" \
-                    -f "inputs[systests_branch]=${{ inputs.SYSTEM_TESTS_BRANCH }}" \
+                    -f "inputs[systests_branch]=${SYSTEM_TESTS_BRANCH}" \
                     -f "inputs[ks_branch]=release" \
                     --raw-field "inputs[source_artifact]=${SOURCE_ARTIFACT}")
 
@@ -176,9 +181,14 @@ jobs:
                   fi
 
                   # Re-run: the dispatch step is skipped, so find the run the first attempt started.
-                  # It is minutes old by now, so the run list already shows it.
-                  run_id=$(gh api "repos/armosec/shared-workflows/actions/workflows/helm-e2e-receiver.yaml/runs?per_page=100" \
-                    --jq '.workflow_runs | map(select(.name | contains("'"$CORRELATION_ID"'"))) | first | .id // empty')
+                  # The App token can see a new run minutes late, so retry for a while.
+                  for i in {1..15}; do
+                    run_id=$(gh api "repos/armosec/shared-workflows/actions/workflows/helm-e2e-receiver.yaml/runs?per_page=100" \
+                      --jq '.workflow_runs | map(select(.name | contains("'"$CORRELATION_ID"'"))) | first | .id // empty')
+                    [ -n "$run_id" ] && break
+                    echo "Attempt $i: waiting for the first attempt's run to show up..."
+                    sleep 30
+                  done
                   if [ -z "$run_id" ]; then
                     echo "::error::Could not find the E2E run started by the first attempt (${CORRELATION_ID})"
                     exit 1
