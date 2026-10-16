@@ -118,7 +118,7 @@ jobs:
                   # The App token can see a new run late, so retry for a while.
                   for i in {1..15}; do
                     run_id=$(gh api "repos/armosec/shared-workflows/actions/workflows/helm-e2e-receiver.yaml/runs?per_page=100" \
-                      --jq '.workflow_runs[] | select((.display_title // "") + " " + (.name // "") | contains("'"$CORRELATION_ID"'")) | .id' | head -n 1)
+                      --jq '[.workflow_runs[] | select((.display_title // "") + " " + (.name // "") | contains("'"$CORRELATION_ID"'")) | .id] | first // empty')
                     [ -n "$run_id" ] && break
                     echo "Attempt $i: waiting for the previous attempt's run to show up..."
                     sleep 30
@@ -126,8 +126,9 @@ jobs:
 
                   # If not found in the newest 100 runs, search older pages before concluding no run exists
                   if [ -z "$run_id" ]; then
-                    run_id=$(gh api --paginate "repos/armosec/shared-workflows/actions/workflows/helm-e2e-receiver.yaml/runs?per_page=100" \
-                      --jq '.workflow_runs[] | select((.display_title // "") + " " + (.name // "") | contains("'"$CORRELATION_ID"'")) | .id' 2>/dev/null | head -n 1)
+                    all_runs=$(gh api --paginate "repos/armosec/shared-workflows/actions/workflows/helm-e2e-receiver.yaml/runs?per_page=100" \
+                      --jq '.workflow_runs[] | select((.display_title // "") + " " + (.name // "") | contains("'"$CORRELATION_ID"'")) | .id')
+                    run_id=$(head -n 1 <<< "$all_runs")
                   fi
 
                   if [ -n "$run_id" ]; then
