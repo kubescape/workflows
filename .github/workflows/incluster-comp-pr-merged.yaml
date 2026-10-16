@@ -244,9 +244,33 @@ jobs:
                   owner: armosec
                   repositories: shared-workflows
 
+            - name: Find existing E2E workflow run
+              id: find-run
+              if: ${{ github.run_attempt > 1 }}
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+                  CORRELATION_ID: ${{ steps.dispatch-info.outputs.correlation_id }}
+              run: |
+                  # On a re-run, check if a previous attempt already started an E2E run.
+                  # The App token can see a new run late, so retry for a while.
+                  for i in {1..15}; do
+                    run_id=$(gh api "repos/armosec/shared-workflows/actions/workflows/helm-e2e-receiver.yaml/runs?per_page=100" \
+                      --jq '.workflow_runs | map(select(.name | contains("'"$CORRELATION_ID"'"))) | first | .id // empty')
+                    [ -n "$run_id" ] && break
+                    echo "Attempt $i: waiting for the previous attempt's run to show up..."
+                    sleep 30
+                  done
+                  if [ -n "$run_id" ]; then
+                    echo "Found existing E2E run: ${run_id}"
+                    echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+                    gh api "repos/armosec/shared-workflows/actions/runs/${run_id}" --jq '"url=" + .html_url' >> "$GITHUB_OUTPUT"
+                  else
+                    echo "No existing E2E run found for ${CORRELATION_ID} (e.g. earlier job failed on first attempt). A new run will be dispatched."
+                  fi
+
             - name: Dispatch system tests to private repo
               id: dispatch
-              if: ${{ github.run_attempt == 1 }}
+              if: ${{ steps.find-run.outputs.run_id == '' }}
               env:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
                   CORRELATION_ID: ${{ steps.dispatch-info.outputs.correlation_id }}
@@ -328,46 +352,21 @@ jobs:
 
                   echo "Dispatch completed"
 
-            - name: Find E2E workflow run
-              id: find-run
-              env:
-                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
-                  CORRELATION_ID: ${{ steps.dispatch-info.outputs.correlation_id }}
-                  DISPATCHED_RUN_ID: ${{ steps.dispatch.outputs.run_id }}
-                  DISPATCHED_URL: ${{ steps.dispatch.outputs.url }}
-              run: |
-                  # First attempt: the dispatch call returned the run ID, so there is nothing to search for.
-                  if [ -n "$DISPATCHED_RUN_ID" ]; then
-                    echo "run_id=${DISPATCHED_RUN_ID}" >> "$GITHUB_OUTPUT"
-                    echo "url=${DISPATCHED_URL}" >> "$GITHUB_OUTPUT"
-                    exit 0
-                  fi
-
-                  # Re-run: the dispatch step is skipped, so find the run the first attempt started.
-                  # The App token can see a new run minutes late, so retry for a while.
-                  for i in {1..15}; do
-                    run_id=$(gh api "repos/armosec/shared-workflows/actions/workflows/helm-e2e-receiver.yaml/runs?per_page=100" \
-                      --jq '.workflow_runs | map(select(.name | contains("'"$CORRELATION_ID"'"))) | first | .id // empty')
-                    [ -n "$run_id" ] && break
-                    echo "Attempt $i: waiting for the first attempt's run to show up..."
-                    sleep 30
-                  done
-                  if [ -z "$run_id" ]; then
-                    echo "::error::Could not find the E2E run started by the first attempt (${CORRELATION_ID})"
-                    exit 1
-                  fi
-                  echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
-                  gh api "repos/armosec/shared-workflows/actions/runs/${run_id}" --jq '"url=" + .html_url' >> "$GITHUB_OUTPUT"
-
             - name: Re-run failed jobs in private repo
               id: rerun
-              if: ${{ github.run_attempt > 1 }}
+              if: ${{ steps.find-run.outputs.run_id != '' }}
               env:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
                   RUN_ID: ${{ steps.find-run.outputs.run_id }}
               run: |
-                  conclusion=$(gh api "repos/armosec/shared-workflows/actions/runs/${RUN_ID}" --jq '.conclusion')
-                  echo "Previous conclusion: $conclusion"
+                  read status conclusion < <(gh api "repos/armosec/shared-workflows/actions/runs/${RUN_ID}" \
+                    --jq '[.status, .conclusion // "null"] | @tsv')
+                  echo "Run status: $status, conclusion: $conclusion"
+
+                  if [ "$status" != "completed" ]; then
+                    echo "Workflow is currently ${status}. Waiting for it to finish."
+                    exit 0
+                  fi
 
                   if [ "$conclusion" = "success" ]; then
                     echo "Previous run passed. Nothing to re-run."
@@ -394,8 +393,8 @@ jobs:
               if: ${{ steps.rerun.outputs.skip != 'true' }}
               env:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
-                  RUN_ID: ${{ steps.find-run.outputs.run_id }}
-                  URL: ${{ steps.find-run.outputs.url }}
+                  RUN_ID: ${{ steps.find-run.outputs.run_id || steps.dispatch.outputs.run_id }}
+                  URL: ${{ steps.find-run.outputs.url || steps.dispatch.outputs.url }}
               run: |
                   echo "Monitoring: ${URL}"
 
