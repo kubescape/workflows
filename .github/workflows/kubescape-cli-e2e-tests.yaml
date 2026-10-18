@@ -34,9 +34,7 @@ on:
                     "scan_local_list_of_files",
                     "scan_and_submit_to_backend",
                     "scan_git_repository_and_submit_to_backend",
-                    "scan_with_exception_to_backend",
-                    "scan_customer_configuration",
-                    "scan_compliance_score"
+                    "scan_with_exception_to_backend"
                     ]'
 jobs:
     wf-preparation:
