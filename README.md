@@ -53,19 +53,10 @@ In step 3, the workflow will:
 
 * Retag the docker image for “latest” and create a new tag without the ```-prerelease``` suffix.
 * Create a GitHub release.
-* Trigger another job (Helm chart CICD) as ```workflow_dispatch``` and will pass the required parameters and arguments.
 
-### Step 4: Helm chart CICD.
+### Step 4: Helm chart update (manual).
 
-As I mentioned before, the previous job has triggered the Helm chart CICD workflow that will run in the ```kubescape/helm-charts``` repo and ```dev``` branch. 
-The Helm chart CICD will:
-* Update the new tag of the specific component in the helm values file
-* Bump the chart version
-* Commit new changes to ```dev``` branch.
-* Create a new PR from the ```dev``` branch to the ```master``` branch.
-* Run E2E tests (```helm-branch: dev```)
-* Merge the PR
-* Create a new helm release
+A release no longer updates the Helm chart. Component tags in [`kubescape/helm-charts`](https://github.com/kubescape/helm-charts) are bumped by hand in a PR that can move several components together, and the chart is released from there with the `03-Helm chart release` workflow.
 
 ### A draw of the flow:
 ![Workflow](./assets/incluster_component_flow.jpeg)
