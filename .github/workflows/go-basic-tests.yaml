@@ -275,7 +275,7 @@ jobs:
       continue-on-error: true
       run: |
         echo "## Installing go-licenses tool"
-        go install github.com/google/go-licenses@latest
+        go install github.com/google/go-licenses/v2@v2.0.1
         echo "## Scanning for forbiden licenses ##"
         go-licenses check ./...
 
