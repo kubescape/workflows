@@ -265,6 +265,11 @@ jobs:
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+    # Build the scanner with the runner's Go before switching to the caller's toolchain.
+    - name: Install go-licenses
+      continue-on-error: true
+      run: GOBIN="$RUNNER_TEMP/license-tools" go install github.com/google/go-licenses/v2@v2.0.1
+
     - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       name: Setup Go
       with:
@@ -273,11 +278,7 @@ jobs:
     - name: Scanning - Forbidden Licenses (go-licenses)
       id: licenses-scan
       continue-on-error: true
-      run: |
-        echo "## Installing go-licenses tool"
-        go install github.com/google/go-licenses@latest
-        echo "## Scanning for forbiden licenses ##"
-        go-licenses check ./...
+      run: '"$RUNNER_TEMP/license-tools/go-licenses" check ./...'
 
     - name: Scanning - Credentials (GitGuardian)
       if: needs.check-secret.outputs.run-gitgardian == 'true'
