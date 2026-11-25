@@ -153,7 +153,7 @@ async function run({ github, context, core, start, now = Date.now() }) {
     if (pr.state !== 'closed' || pr.merged || time(pr.created_at) < startsAt || pr.user.type === 'Bot' || await maintainer(pr.user.login)) return;
     const others = await openPRs();
     for (const { number, closes } of issueLinks(pr.body, repository)) {
-      if (!closes || others.some(p => sameUser(p.user.login, pr.user.login) && issueLinks(p.body, repository).some(l => l.number === number && l.closes))) continue;
+      if (!closes || others.some(p => sameUser(p.user.login, pr.user.login) && issueLinks(p.body, repository).some(l => l.number === number))) continue;
       let issue;
       try { issue = await getIssue(number); } catch (error) {
         if (error.status === 404) continue;
@@ -174,6 +174,46 @@ async function run({ github, context, core, start, now = Date.now() }) {
     // GITHUB_TOKEN writes do not reliably trigger another workflow run.
     await releaseClosedPR(await getPR(pr.number));
   }
+  async function assessLinks(pr) {
+    const failures = [];
+    const closures = [];
+    const links = issueLinks(pr.body, repository);
+    if (!links.length) failures.push('Link the issue with `Fixes #number` (or `Refs #number` for partial work).');
+    let candidates;
+    for (const link of links) {
+      let issue;
+      try { issue = await getIssue(link.number); } catch (error) {
+        if (error.status !== 404) throw error;
+        failures.push(`Issue #${link.number} does not exist in this repository.`);
+        continue;
+      }
+      if (issue.pull_request) { failures.push(`#${link.number} is a PR, not an issue.`); continue; }
+      if (issue.state !== 'open') failures.push(`Issue #${link.number} is closed.`);
+      if (hasLabel(issue, config.needsTriageLabel)) {
+        failures.push(`Issue #${link.number} needs maintainer triage.`);
+        if (link.closes) closures.push(`Issue #${link.number} needs maintainer triage before a fixing PR can be reviewed. Please wait for triage and assignment, then reopen this PR.`);
+      }
+      if (!assignedTo(issue, pr.user.login)) {
+        const reason = `You are not assigned to issue #${link.number}. Please ask a maintainer to assign you before reopening this PR.`;
+        failures.push(reason);
+        closures.push(reason);
+      } else if (issue.state === 'open' && !hasLabel(issue, config.needsTriageLabel)) {
+        candidates ??= await openPRs();
+        // Keep the earliest open PR from a current assignee. An older PR by
+        // someone without the assignment must not reserve the issue.
+        const duplicate = candidates.filter(other => other.number < pr.number &&
+          assignedTo(issue, other.user.login) &&
+          issueLinks(other.body, repository).some(l => l.number === link.number))
+          .sort((a, b) => a.number - b.number)[0];
+        if (duplicate) {
+          const reason = `Issue #${link.number} already has an open PR from a current assignee: #${duplicate.number}. Please continue there instead of opening a duplicate.`;
+          failures.push(reason);
+          closures.push(reason);
+        }
+      }
+    }
+    return { failures, closures };
+  }
   async function checkPR(number) {
     const pr = await getPR(number);
     if (pr.state !== 'open') { await releaseClosedPR(pr); return; }
@@ -182,38 +222,18 @@ async function run({ github, context, core, start, now = Date.now() }) {
     await api.repos.createCommitStatus({ ...repo, sha: pr.head.sha, context: CHECK, state: 'pending',
       target_url: `${url}/pull/${pr.number}`, description: 'Checking issue triage and assignment.' });
     const exempt = !issuesEnabled || time(pr.created_at) < startsAt || pr.user.type === 'Bot' || await maintainer(pr.user.login);
-    const failures = [];
-    let closeForTriage = false;
-    if (!exempt) {
-      const links = issueLinks(pr.body, repository);
-      if (!links.length) failures.push('Link the issue with `Fixes #number` (or `Refs #number` for partial work).');
-      for (const link of links) {
-        let issue;
-        try { issue = await getIssue(link.number); } catch (error) {
-          if (error.status !== 404) throw error;
-          failures.push(`Issue #${link.number} does not exist in this repository.`);
-          continue;
-        }
-        if (issue.pull_request) { failures.push(`#${link.number} is a PR, not an issue.`); continue; }
-        if (issue.state !== 'open') failures.push(`Issue #${link.number} is closed.`);
-        if (hasLabel(issue, config.needsTriageLabel)) {
-          failures.push(`Issue #${link.number} needs maintainer triage.`);
-          closeForTriage ||= link.closes;
-        }
-        if (!assignedTo(issue, pr.user.login)) failures.push(`Please get assigned to #${link.number} before working on it.`);
-      }
-    }
+    const { failures, closures } = exempt ? { failures: [], closures: [] } : await assessLinks(pr);
     await api.repos.createCommitStatus({ ...repo, sha: pr.head.sha, context: CHECK,
       state: failures.length ? 'failure' : 'success', target_url: `${url}/pull/${pr.number}`,
-      description: failures.length ? 'Issue triage or assignment needs attention.' : exempt ? 'Exempt from contributor issue checks.' : 'Linked issues are triaged and assigned.' });
+      description: failures.length ? 'Issue triage, assignment or duplicate PR needs attention.' : exempt ? 'Exempt from contributor issue checks.' : 'Linked issues are triaged, assigned and unique.' });
     if (failures.length) await say(pr.number, 'check', failures.join('\n\n'));
-    else if ((await comments(pr.number)).some(c => botComment(c, '<!-- kubescape-policy:check -->'))) await say(pr.number, 'check', 'The issue triage and assignment checks now pass.');
-    if (closeForTriage) await closePR(pr, 'The linked issue needs maintainer triage before a fixing PR can be reviewed. Please wait for triage and assignment, then reopen this PR.', async current => {
-      for (const link of issueLinks(current.body, repository)) {
-        if (link.closes && hasLabel(await getIssue(link.number), config.needsTriageLabel)) return true;
-      }
-      return false;
-    });
+    else if ((await comments(pr.number)).some(c => botComment(c, '<!-- kubescape-policy:check -->'))) await say(pr.number, 'check', 'The issue triage, assignment and duplicate PR checks now pass.');
+    if (closures.length) {
+      const reason = closures[0];
+      // Re-read assignment and open PR state immediately before closing. A
+      // maintainer may have assigned the author or closed the earlier PR.
+      await closePR(pr, reason, async current => (await assessLinks(current)).closures.includes(reason));
+    }
   }
   async function expireAssignments(prs) {
     const issues = await list(api.issues.listForRepo, { state: 'open', labels: config.assignedLabel });

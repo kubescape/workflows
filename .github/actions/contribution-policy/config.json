@@ -7,7 +7,7 @@
   "beginnerLabels": ["good first issue", "good second issue"],
   "maxBeginnerAssignmentsPerLabel": 2,
   "assignmentReminderDays": 4,
-  "assignmentExpiryDays": 8,
+  "assignmentExpiryDays": 14,
   "requestedChangesStaleDays": 3,
   "stalePRCloseDays": 7
 }

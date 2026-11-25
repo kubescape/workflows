@@ -163,8 +163,8 @@ test('missing links, foreign links, nonexistent issues and PR-as-issue fail with
   }
 });
 
-test('an issue change refreshes the failed PR check, including bot-triggered assignment in the same run', async () => {
-  const f = fixture({ issues: [issue(1)], prs: [pr()] });
+test('assignment refreshes a pinned failed PR check in the same run', async () => {
+  const f = fixture({ issues: [issue(1)], prs: [pr(10, { labels: [label(config.pinnedLabel)] })] });
   await f.execute('pull_request_target', { pull_request: pr() });
   assert.equal(f.state.statuses.at(-1).state, 'failure');
   await f.command(1, '/assign @alice', 'maintainer');
@@ -193,7 +193,7 @@ test('old closure events cannot release a later reassignment', async () => {
 });
 
 test('inactivity gives a reminder before expiry, then releases without counting bot activity', async () => {
-  const f = fixture({ issues: [issue(1, { labels: [label(config.assignedLabel)], assignees: [user('alice')] })] });
+  const f = fixture({ day: 15, issues: [issue(1, { labels: [label(config.assignedLabel)], assignees: [user('alice')] })] });
   f.state.events.set(1, [{ event: 'assigned', assignee: user('alice'), created_at: date(1) }]);
   await f.execute('schedule');
   assert.equal(f.state.issues.get(1).assignees.length, 1);
@@ -204,7 +204,7 @@ test('inactivity gives a reminder before expiry, then releases without counting 
 
 test('a linked draft PR or pinned issue protects its assignment from expiry', async () => {
   for (const pinned of [false, true]) {
-    const f = fixture({ issues: [issue(1, { labels: [label(config.assignedLabel), ...(pinned ? [label(config.pinnedLabel)] : [])], assignees: [user('alice')] })], prs: pinned ? [] : [pr(10, { draft: true })] });
+    const f = fixture({ day: 30, issues: [issue(1, { labels: [label(config.assignedLabel), ...(pinned ? [label(config.pinnedLabel)] : [])], assignees: [user('alice')] })], prs: pinned ? [] : [pr(10, { draft: true })] });
     f.state.events.set(1, [{ event: 'assigned', assignee: user('alice'), created_at: date(1) }]);
     await f.execute('schedule');
     assert.equal(f.state.issues.get(1).assignees.length, 1);
@@ -353,7 +353,7 @@ test('reply or approval arriving during stale processing prevents closure', asyn
 
 test('progress or a pin arriving during assignment expiry prevents unassignment', async () => {
   for (const change of ['progress', 'pin']) {
-    const f = fixture({ issues: [issue(1, { labels: [label(config.assignedLabel)], assignees: [user('alice')] })] });
+    const f = fixture({ day: 15, issues: [issue(1, { labels: [label(config.assignedLabel)], assignees: [user('alice')] })] });
     f.state.events.set(1, [{ event: 'assigned', assignee: user('alice'), created_at: date(1) }]);
     f.state.comments.set(1, [{ id: 1, user: user('github-actions[bot]', 'Bot'), created_at: date(5), body: `<!-- kubescape-policy:assignment-reminder-alice-${epoch + DAY} -->` }]);
     const getComments = f.github.rest.issues.listComments;
@@ -363,7 +363,7 @@ test('progress or a pin arriving during assignment expiry prevents unassignment'
       if (!injected) {
         injected = true;
         if (change === 'pin') f.state.issues.get(1).labels.push(label(config.pinnedLabel));
-        else f.state.comments.get(1).push({ id: 2, user: user('alice'), created_at: date(12), body: 'Progress update' });
+        else f.state.comments.get(1).push({ id: 2, user: user('alice'), created_at: date(15), body: 'Progress update' });
       }
       return result;
     };
@@ -435,4 +435,112 @@ test('repositories without issues skip issue requirements but retain stale revie
   await f.execute('schedule', { repository: { has_issues: false } });
   assert.equal(f.state.statuses.at(-1).state, 'success');
   assert.equal(f.state.prs.get(10).state, 'open');
+});
+
+
+test('non-assignee PRs close for Fixes and Refs without releasing the rightful assignee', async () => {
+  for (const body of ['Fixes #1', 'Refs #1']) {
+    const f = fixture({ prs: [pr(10, { user: user('bob'), body })] });
+    await f.execute('pull_request_target', { pull_request: pr() });
+    assert.equal(f.state.prs.get(10).state, 'closed');
+    assert.equal(f.state.statuses.at(-1).state, 'failure');
+    assert.deepEqual(f.state.issues.get(1).assignees, [user('alice')]);
+    assert.match(f.state.comments.get(10).at(-1).body, /not assigned to issue #1/);
+  }
+});
+
+test('a maintainer assignment arriving during validation prevents non-assignee closure', async () => {
+  const f = fixture({ issues: [issue(1)], prs: [pr()] });
+  const writeStatus = f.github.rest.repos.createCommitStatus;
+  f.github.rest.repos.createCommitStatus = async args => {
+    const result = await writeStatus(args);
+    if (args.state === 'failure') f.state.issues.get(1).assignees.push(user('alice'));
+    return result;
+  };
+  await f.execute('pull_request_target', { pull_request: pr() });
+  assert.equal(f.state.prs.get(10).state, 'open');
+});
+
+test('later duplicate PR closes and retains assignment protected by an earlier Fixes or Refs PR', async () => {
+  for (const body of ['Fixes #1', 'Refs #1']) {
+    const f = fixture({ prs: [pr(11), pr(10, { body, draft: true })] });
+    await f.execute('pull_request_target', { pull_request: pr(11) });
+    assert.equal(f.state.prs.get(11).state, 'closed');
+    assert.equal(f.state.prs.get(10).state, 'open');
+    assert.deepEqual(f.state.issues.get(1).assignees, [user('alice')]);
+    assert.match(f.state.comments.get(11).at(-1).body, /open PR from a current assignee: #10/);
+  }
+});
+
+test('duplicate selection keeps the earliest assignee PR regardless of API ordering', async () => {
+  const f = fixture({ prs: [pr(12), pr(11), pr(10)] });
+  await f.execute('schedule');
+  assert.equal(f.state.prs.get(10).state, 'open');
+  assert.equal(f.state.prs.get(11).state, 'closed');
+  assert.equal(f.state.prs.get(12).state, 'closed');
+  assert.deepEqual(f.state.issues.get(1).assignees, [user('alice')]);
+});
+
+test('closed, unrelated or non-assignee PRs do not block the assigned contributor', async () => {
+  for (const older of [pr(9, { state: 'closed' }), pr(9, { body: 'Fixes #2' }), pr(9, { user: user('bob') })]) {
+    const f = fixture({ prs: [older, pr()] });
+    await f.execute('pull_request_target', { pull_request: pr() });
+    assert.equal(f.state.prs.get(10).state, 'open');
+    assert.equal(f.state.statuses.at(-1).state, 'success');
+  }
+});
+
+test('closing the earlier PR during validation prevents duplicate closure', async () => {
+  const f = fixture({ prs: [pr(9), pr()] });
+  const writeStatus = f.github.rest.repos.createCommitStatus;
+  f.github.rest.repos.createCommitStatus = async args => {
+    const result = await writeStatus(args);
+    if (args.state === 'failure') f.state.prs.get(9).state = 'closed';
+    return result;
+  };
+  await f.execute('pull_request_target', { pull_request: pr() });
+  assert.equal(f.state.prs.get(10).state, 'open');
+});
+
+test('pinned duplicates fail the check but stay open for maintainer coordination', async () => {
+  const f = fixture({ prs: [pr(9), pr(10, { labels: [label(config.pinnedLabel)] })] });
+  await f.execute('pull_request_target', { pull_request: pr() });
+  assert.equal(f.state.prs.get(10).state, 'open');
+  assert.equal(f.state.statuses.at(-1).state, 'failure');
+});
+
+test('assignment expires at 14 inactive days, not at 13 days', async () => {
+  const f = fixture({ day: 14, issues: [issue(1, { labels: [label(config.assignedLabel)], assignees: [user('alice')] })] });
+  f.state.events.set(1, [{ event: 'assigned', assignee: user('alice'), created_at: date(1) }]);
+  f.state.comments.set(1, [{ id: 1, user: user('github-actions[bot]', 'Bot'), created_at: date(5), body: `<!-- kubescape-policy:assignment-reminder-alice-${epoch + DAY} -->` }]);
+  await f.execute('schedule');
+  assert.equal(f.state.issues.get(1).assignees.length, 1);
+  await f.execute('schedule', {}, { now: epoch + 15 * DAY });
+  assert.equal(f.state.issues.get(1).assignees.length, 0);
+});
+
+test('issue author cannot self-assign but can be assigned by a maintainer after triage', async () => {
+  const f = fixture({ issues: [issue(1, { user: user('alice') })] });
+  await f.command(1, '/assign-me');
+  assert.equal(f.state.issues.get(1).assignees.length, 0);
+  await f.command(1, '/assign @alice', 'maintainer');
+  assert.deepEqual(f.state.issues.get(1).assignees, [user('alice')]);
+});
+
+
+test('duplicate lookup failure leaves the check pending without closing either PR', async () => {
+  const f = fixture({ prs: [pr(9), pr()] });
+  f.github.rest.pulls.list = async () => { throw new Error('unavailable'); };
+  await assert.rejects(f.execute('pull_request_target', { pull_request: pr() }), /unavailable/);
+  assert.equal(f.state.statuses.at(-1).state, 'pending');
+  assert.equal(f.state.prs.get(9).state, 'open');
+  assert.equal(f.state.prs.get(10).state, 'open');
+});
+
+test('duplicate from another current assignee closes without releasing the earlier author', async () => {
+  const f = fixture({ issues: [issue(1, { assignees: [user('alice'), user('bob')] })], prs: [pr(9), pr(10, { user: user('bob') })] });
+  await f.execute('pull_request_target', { pull_request: pr() });
+  assert.equal(f.state.prs.get(10).state, 'closed');
+  assert.equal(f.state.prs.get(9).state, 'open');
+  assert.deepEqual(f.state.issues.get(1).assignees, [user('alice')]);
 });
