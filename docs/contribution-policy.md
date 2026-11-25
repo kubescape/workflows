@@ -87,8 +87,10 @@ this lifecycle. Bot reviews and outside contributors' reviews do not.
 ## Organization rollout
 
 1. Merge the shared action in `kubescape/workflows` and the organization-wide
-   policy in `kubescape/project-governance`. This changes the existing allowance
-   for small issue-free PRs. The assignment cap is three **per repository**.
+   policy in `kubescape/project-governance` after maintainer review and approval.
+   This changes the existing allowance for small issue-free PRs. The assignment
+   cap is three **per repository**. Start with a pilot in `kubescape/kubevuln`;
+   keep every other repository disabled until the pilot is reviewed.
 2. Inventory every organization repository, including the `private` flag and
    current write permissions. Generate caller workflows with
    `scripts/contribution-policy-rollout.py --inventory INVENTORY.jsonl --sha FULL_SHA --output LOCAL_DIRECTORY`.
@@ -100,12 +102,20 @@ this lifecycle. Bot reviews and outside contributors' reviews do not.
    and non-writable repositories are reported as skipped, not silently enabled.
    Repositories without issues still get stale-PR handling; issue requirements
    are skipped there so every PR is not blocked on an impossible issue link.
-4. Each caller pins the shared action to a full reviewed commit SHA. The action
-   executes from its downloaded action directory and never checks out the PR.
+4. Each caller pins the shared action to a full reviewed commit SHA. Before
+   merging the rollout callers or activating the pilot, verify that commit is
+   present on `kubescape/workflows` `main` and contains the action. The current
+   rollout depends on `kubescape/workflows#110`; its PR-branch SHA is not a
+   substitute for this check. Squash or rebase merging can change commit SHAs:
+   select a commit from `main` after merge and update every caller if necessary,
+   including the disabled caller bundled with the shared action itself.
+   The action executes from its downloaded directory and never checks out the PR.
    No personal access token or cross-repository write token is required.
 5. Create `status: needs-triage`, `📍 Assigned`, `📌 Pinned`, and `status: stale`
    in each target repository. Use an agreed rollout timestamp after installation
-   so the existing backlog is exempt. An organization owner can distribute
+   so the existing backlog is exempt. Initially set the variable only for the
+   `kubescape/kubevuln` pilot. Creating labels alone does not enable enforcement.
+   After the pilot is accepted, an organization owner can distribute
    `CONTRIBUTION_POLICY_START` as an organization variable to the selected
    repositories, or repository maintainers can configure it individually.
 6. Allow the caller workflow to use `pull_request_target` in the organization
