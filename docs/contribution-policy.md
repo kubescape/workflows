@@ -38,11 +38,12 @@ are not expired automatically.
 ## Opening and updating a PR
 
 Link each issue with `Fixes #number`, `Closes #number`, `Resolves #number` or
-`Refs #number` for partial work. Same-repository issue URLs also work. Examples
+`Refs #number` for partial work. Colon forms such as `Fixes: #number` and
+same-repository issue URLs also work. Examples
 inside HTML comments, code blocks or quotations do not count. Links to other
 repositories or PR numbers do not satisfy this check.
 
-The **Contribution policy** status checks that every referenced issue is open,
+The **Contribution policy** check verifies that every referenced issue is open,
 triaged and assigned to the author. A missing link fails the check. A PR linked
 to an issue that is not assigned to its author is automatically closed with an
 explanation, including `Refs` PRs. Opening a PR does not automatically assign
@@ -65,7 +66,9 @@ workflow; closure is not synchronous with submitting a PR.
 
 Closing an unmerged PR releases its author's linked fixing-issue assignments,
 unless another open linked PR by that author still uses the issue or the issue
-was reassigned after closure. Other contributors' assignments are preserved.
+was reassigned after closure. Pre-rollout assignments and assignments with unknown
+start times are also preserved. Interrupted cleanup is retried using the
+`status: policy-release-pending` label. Other contributors' assignments are preserved.
 
 PRs by bots and maintainers are exempt from the contribution checks and automatic
 closure. Exemption uses GitHub account type and current repository permission,
@@ -111,7 +114,8 @@ this lifecycle. Bot reviews and outside contributors' reviews do not.
    including the disabled caller bundled with the shared action itself.
    The action executes from its downloaded directory and never checks out the PR.
    No personal access token or cross-repository write token is required.
-5. Create `status: needs-triage`, `📍 Assigned`, `📌 Pinned`, and `status: stale`
+5. Create `status: needs-triage`, `📍 Assigned`, `📌 Pinned`, `status: stale`,
+   and `status: policy-release-pending`
    in each target repository. Use an agreed rollout timestamp after installation
    so the existing backlog is exempt. Initially set the variable only for the
    `kubescape/kubevuln` pilot. Creating labels alone does not enable enforcement.
@@ -139,8 +143,20 @@ Values live in `.github/actions/contribution-policy/config.json` in `kubescape/w
 the repository using a concurrency queue, and current state is fetched before
 assignment. GitHub queues at most 100 pending runs; a command dropped because the
 queue is full needs to be posted again. Scheduled runs reconcile PR checks, but
-do not replay dropped assignment commands. API errors stop processing; a check
-already being evaluated stays pending instead of retaining an earlier success.
+do not replay dropped assignment commands. Independent PRs continue to be processed
+after an API error, and the workflow reports the errors at the end. A check being
+revalidated fails until validation finishes, so an API error cannot preserve an
+obsolete success after the check has been reset. If GitHub refuses the check write
+itself, the workflow fails and maintainers must inspect the failed run.
+
+The caller needs `checks: write`. It updates one check per head commit instead of
+appending commit statuses, which have a per-context limit. GitHub checks are also
+commit-scoped: all open PRs sharing a head must pass before that commit receives
+success. A valid or maintainer-authored PR can therefore be blocked by an invalid
+sibling until it is fixed or closed and the policy rechecks. This conservative
+behavior prevents a sibling PR from overwriting a failure. During the Kubevuln
+pilot, verify the required check on two PRs sharing one head, including a fork PR,
+before enabling the ruleset. No merge-queue support is implied.
 
 The automation deliberately does not infer AI authorship, maintain contributor
 blacklists or incident counters, or automatically approve/merge PRs. Those are

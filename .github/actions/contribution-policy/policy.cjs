@@ -14,8 +14,8 @@ const time = value => Date.parse(value) || 0;
 function issueLinks(body, repository) {
   const visible = (body ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, '')
     .replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)/g, '')
-    .replace(/`[^`\n]*`/g, '').replace(/^\s*>.*$/gm, '');
-  const pattern = /\b(fix(?:es|ed)?|close[sd]?|resolve[sd]?|refs)\s+<?(?:#([1-9]\d*)|(?:https:\/\/github\.com\/)?([\w.-]+\/[\w.-]+)(?:\/issues\/|#)([1-9]\d*))(?=$|[\s,.;)>])/gi;
+    .replace(/`[^`\n]*`/g, '').replace(/^(?: {4}|\t|\s*>).*$/gm, '');
+  const pattern = /\b(fix(?:es|ed)?|close[sd]?|resolve[sd]?|refs):?\s+<?(?:#([1-9]\d*)|(?:https:\/\/github\.com\/)?([\w.-]+\/[\w.-]+)(?:\/issues\/|#)([1-9]\d*))(?=$|[\s,.;)>])/gi;
   const links = new Map();
   for (const match of visible.matchAll(pattern)) {
     if (match[3] && match[3].toLowerCase() !== repository.toLowerCase()) continue;
@@ -62,7 +62,10 @@ function assignmentActivity(events, comments, user) {
 
 async function run({ github, context, core, start, now = Date.now() }) {
   const startsAt = time(start);
-  if (!startsAt || !/^\d{4}-\d{2}-\d{2}T.*Z$/.test(start)) throw new Error('POLICY_START must be an ISO UTC timestamp, e.g. 2026-12-01T00:00:00Z');
+  if (!startsAt || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(start) ||
+    new Date(startsAt).toISOString() !== start.replace(/(?<!\.\d{3})Z$/, '.000Z')) {
+    throw new Error('POLICY_START must be a valid ISO UTC timestamp, e.g. 2026-12-01T00:00:00Z');
+  }
   if (now < startsAt) return;
   const repo = context.repo;
   const repository = `${repo.owner}/${repo.repo}`;
@@ -75,6 +78,13 @@ async function run({ github, context, core, start, now = Date.now() }) {
   const comments = number => list(api.issues.listComments, { issue_number: number });
   const events = number => list(api.issues.listEventsForTimeline, { issue_number: number });
   const openPRs = () => list(api.pulls.list, { state: 'open', sort: 'created', direction: 'asc' });
+  const latestAssignment = async (number, user) => (await events(number))
+    .filter(e => ['assigned', 'unassigned'].includes(e.event) && sameUser(e.assignee?.login, user))
+    .sort((a, b) => b.id - a.id)[0];
+  const errors = [];
+  async function attempt(description, work) {
+    try { await work(); } catch (error) { errors.push(new Error(`${description}: ${error.message}`, { cause: error })); }
+  }
   const permissionCache = new Map();
   async function maintainer(login) {
     if (!permissionCache.has(login)) {
@@ -100,11 +110,22 @@ async function run({ github, context, core, start, now = Date.now() }) {
   async function removeLabel(number, label) {
     if (hasLabel(await getIssue(number), label)) await api.issues.removeLabel({ ...repo, issue_number: number, name: label });
   }
-  async function unassign(number, user) {
+  async function ensureTriage(number) {
     const issue = await getIssue(number);
-    if (!assignedTo(issue, user)) return;
-    await api.issues.removeAssignees({ ...repo, issue_number: number, assignees: [user] });
+    if (issue.pull_request || issue.state !== 'open' || time(issue.created_at) < startsAt || hasLabel(issue, config.needsTriageLabel)) return issue;
+    // Label absence alone is not triage: the opened event may still be queued.
+    if (!(await events(number)).some(e => e.event === 'unlabeled' && e.label?.name === config.needsTriageLabel)) {
+      await addLabel(number, config.needsTriageLabel);
+    }
+    return getIssue(number);
+  }
+  async function unassign(number, user, guard = async () => true, protectPinned = false) {
+    if (!await guard()) return false;
+    const issue = await getIssue(number);
+    if (protectPinned && (issue.state !== 'open' || hasLabel(issue, config.pinnedLabel))) return false;
+    if (assignedTo(issue, user)) await api.issues.removeAssignees({ ...repo, issue_number: number, assignees: [user] });
     if (!(await getIssue(number)).assignees.length) await removeLabel(number, config.assignedLabel);
+    return true;
   }
   async function handleCommand(payload) {
     if (payload.issue.pull_request || payload.comment.user.type === 'Bot') return;
@@ -135,8 +156,9 @@ async function run({ github, context, core, start, now = Date.now() }) {
       await say(number, key, `@${user}, your assignment has been released.`);
       return;
     }
-    const issue = await getIssue(number);
+    const issue = await ensureTriage(number);
     if (assignedTo(issue, user)) {
+      await addLabel(number, config.assignedLabel);
       await say(number, key, `@${user}, you are already assigned.`);
       return;
     }
@@ -159,20 +181,30 @@ async function run({ github, context, core, start, now = Date.now() }) {
         if (error.status === 404) continue;
         throw error;
       }
-      if (issue.pull_request || issue.state !== 'open' || !assignedTo(issue, pr.user.login)) continue;
-      const timeline = await events(number);
-      if (timeline.some(e => e.event === 'assigned' && sameUser(e.assignee?.login, pr.user.login) && time(e.created_at) > time(pr.closed_at))) continue;
-      await unassign(number, pr.user.login);
+      if (issue.pull_request || issue.state !== 'open') continue;
+      if (!assignedTo(issue, pr.user.login)) {
+        if (!issue.assignees.length) await removeLabel(number, config.assignedLabel);
+        continue;
+      }
+      const assignment = await latestAssignment(number, pr.user.login);
+      if (!assignment || assignment.event !== 'assigned' || time(assignment.created_at) < startsAt || time(assignment.created_at) > time(pr.closed_at)) continue;
+      if (!await unassign(number, pr.user.login, async () => (await latestAssignment(number, pr.user.login))?.id === assignment.id)) continue;
       await say(number, `closed-${pr.number}`, `@${pr.user.login}, your assignment was released because #${pr.number} closed without merging. Ask a maintainer if you want to resume.`);
     }
   }
   async function closePR(pr, reason, eligible = async () => true) {
-    const current = await getPR(pr.number);
-    if (current.state !== 'open' || current.head.sha !== pr.head.sha || current.body !== pr.body || hasLabel(current, config.pinnedLabel) || !await eligible(current)) return;
+    const canClose = async () => {
+      const current = await getPR(pr.number);
+      return current.state === 'open' && current.head.sha === pr.head.sha && current.body === pr.body && !hasLabel(current, config.pinnedLabel) && await eligible(current);
+    };
+    if (!await canClose()) return;
+    // Durable retry marker: token-authored closes do not start another run.
+    await addLabel(pr.number, config.cleanupLabel);
     await say(pr.number, 'closure', `${reason}\n\nSee the [contribution guide](https://github.com/kubescape/project-governance/blob/main/CONTRIBUTING.md).`);
+    if (!await canClose()) { await removeLabel(pr.number, config.cleanupLabel); return; }
     await api.pulls.update({ ...repo, pull_number: pr.number, state: 'closed' });
-    // GITHUB_TOKEN writes do not reliably trigger another workflow run.
     await releaseClosedPR(await getPR(pr.number));
+    await removeLabel(pr.number, config.cleanupLabel);
   }
   async function assessLinks(pr) {
     const failures = [];
@@ -182,7 +214,7 @@ async function run({ github, context, core, start, now = Date.now() }) {
     let candidates;
     for (const link of links) {
       let issue;
-      try { issue = await getIssue(link.number); } catch (error) {
+      try { issue = await ensureTriage(link.number); } catch (error) {
         if (error.status !== 404) throw error;
         failures.push(`Issue #${link.number} does not exist in this repository.`);
         continue;
@@ -214,25 +246,48 @@ async function run({ github, context, core, start, now = Date.now() }) {
     }
     return { failures, closures };
   }
+  const checkedHeads = new Set();
   async function checkPR(number) {
     const pr = await getPR(number);
-    if (pr.state !== 'open') { await releaseClosedPR(pr); return; }
-    // Replace any previous success before API reads that could fail. An outage
-    // must leave the required status pending, not preserve a stale approval.
-    await api.repos.createCommitStatus({ ...repo, sha: pr.head.sha, context: CHECK, state: 'pending',
-      target_url: `${url}/pull/${pr.number}`, description: 'Checking issue triage and assignment.' });
-    const exempt = !issuesEnabled || time(pr.created_at) < startsAt || pr.user.type === 'Bot' || await maintainer(pr.user.login);
-    const { failures, closures } = exempt ? { failures: [], closures: [] } : await assessLinks(pr);
-    await api.repos.createCommitStatus({ ...repo, sha: pr.head.sha, context: CHECK,
-      state: failures.length ? 'failure' : 'success', target_url: `${url}/pull/${pr.number}`,
-      description: failures.length ? 'Issue triage, assignment or duplicate PR needs attention.' : exempt ? 'Exempt from contributor issue checks.' : 'Linked issues are triaged, assigned and unique.' });
-    if (failures.length) await say(pr.number, 'check', failures.join('\n\n'));
-    else if ((await comments(pr.number)).some(c => botComment(c, '<!-- kubescape-policy:check -->'))) await say(pr.number, 'check', 'The issue triage, assignment and duplicate PR checks now pass.');
-    if (closures.length) {
-      const reason = closures[0];
-      // Re-read assignment and open PR state immediately before closing. A
-      // maintainer may have assigned the author or closed the earlier PR.
-      await closePR(pr, reason, async current => (await assessLinks(current)).closures.includes(reason));
+    if (pr.state !== 'open') {
+      if (pr.merged || time(pr.created_at) < startsAt || pr.user.type === 'Bot' || await maintainer(pr.user.login)) return;
+      await addLabel(pr.number, config.cleanupLabel);
+      await releaseClosedPR(pr);
+      await removeLabel(pr.number, config.cleanupLabel);
+      return;
+    }
+    if (checkedHeads.has(pr.head.sha)) return;
+    checkedHeads.add(pr.head.sha);
+    // Checks are commit-scoped too. Aggregate every open PR sharing this head;
+    // an exempt or valid sibling must never overwrite an invalid PR's result.
+    const externalId = 'kubescape-contribution-policy-v2';
+    const runs = await list(api.checks.listForRef, { ref: pr.head.sha, check_name: CHECK, filter: 'all' });
+    const existing = runs.filter(c => c.external_id === externalId && c.app?.slug === 'github-actions').sort((a, b) => b.id - a.id)[0];
+    const pending = { status: 'completed', conclusion: 'failure', output: { title: 'Policy revalidation incomplete', summary: 'Checking every open PR sharing this commit. API failures leave this check failing.' } };
+    const check = existing
+      ? (await api.checks.update({ ...repo, check_run_id: existing.id, ...pending })).data
+      : (await api.checks.create({ ...repo, name: CHECK, head_sha: pr.head.sha, external_id: externalId, details_url: `${url}/pull/${pr.number}`, ...pending })).data;
+    const results = [];
+    for (const snapshot of await openPRs()) {
+      if (snapshot.head.sha !== pr.head.sha) continue;
+      const current = await getPR(snapshot.number);
+      if (current.state !== 'open' || current.head.sha !== pr.head.sha) continue;
+      const exempt = !issuesEnabled || time(current.created_at) < startsAt || current.user.type === 'Bot' || await maintainer(current.user.login);
+      results.push({ pr: current, ...(exempt ? { failures: [], closures: [] } : await assessLinks(current)) });
+    }
+    const failed = results.some(r => r.failures.length);
+    await api.checks.update({ ...repo, check_run_id: check.id, status: 'completed', conclusion: failed ? 'failure' : 'success',
+      output: { title: failed ? 'Contribution policy needs attention' : 'Contribution policy passed',
+        summary: results.map(r => `#${r.pr.number}: ${r.failures.length ? r.failures.join(' ') : 'Passed or exempt.'}`).join('\n\n').slice(0, 65000) || 'No open PRs remain on this commit.' } });
+    for (const { pr: current, failures, closures } of results) {
+      await attempt(`PR #${current.number} follow-up`, async () => {
+        if (failures.length) await say(current.number, 'check', failures.join('\n\n'));
+        else if ((await comments(current.number)).some(c => botComment(c, '<!-- kubescape-policy:check -->'))) await say(current.number, 'check', 'The issue triage, assignment and duplicate PR checks now pass.');
+        if (closures.length) {
+          const reason = closures[0];
+          await closePR(current, reason, async fresh => (await assessLinks(fresh)).closures.includes(reason));
+        }
+      });
     }
   }
   async function expireAssignments(prs) {
@@ -259,7 +314,8 @@ async function run({ github, context, core, start, now = Date.now() }) {
           const currentActivity = assignmentActivity(await events(issue.number), await comments(issue.number), assignee.login);
           if (currentActivity !== activity) continue;
           if ((await openPRs()).some(p => sameUser(p.user.login, assignee.login) && issueLinks(p.body, repository).some(l => l.number === issue.number))) continue;
-          await unassign(issue.number, assignee.login);
+          if (!await unassign(issue.number, assignee.login, async () =>
+            assignmentActivity(await events(issue.number), await comments(issue.number), assignee.login) === activity, true)) continue;
           await say(issue.number, `expired-${assignee.login}-${activity}`, `@${assignee.login}, this assignment was released after inactivity. Ask a maintainer to reassign you if you want to continue.`);
         } else if (age >= config.assignmentReminderDays && !warning) {
           await say(issue.number, key, `@${assignee.login}, please share an update or open a linked draft PR. Assignments may be released after ${config.assignmentExpiryDays} days without progress. Ask a maintainer to pin this issue if you need more time.`);
@@ -311,25 +367,20 @@ async function run({ github, context, core, start, now = Date.now() }) {
   const { payload, eventName } = context;
   if (eventName === 'issues' && payload.action === 'opened') {
     if (time(payload.issue.created_at) >= startsAt) {
-      const timeline = await events(payload.issue.number);
-      // Do not undo a maintainer's triage if the opened event was queued.
-      if (!timeline.some(e => e.event === 'unlabeled' && e.label?.name === config.needsTriageLabel)) {
-        await addLabel(payload.issue.number, config.needsTriageLabel);
-      }
+      await ensureTriage(payload.issue.number);
     }
-    return;
   }
   if (eventName === 'issue_comment') await handleCommand(payload);
   if (eventName === 'issues' && payload.action === 'assigned') {
     const number = payload.issue.number;
     const target = payload.assignee?.login;
-    const current = await getIssue(number);
+    const current = await ensureTriage(number);
     if (target && assignedTo(current, target)) {
       const timeline = await events(number);
       const latest = timeline.filter(e => ['assigned', 'unassigned'].includes(e.event) && sameUser(e.assignee?.login, target))
         .sort((a, b) => b.id - a.id)[0];
       // A queued event must not undo a newer assignment by another maintainer.
-      if (latest?.event === 'assigned' && sameUser(latest.actor?.login, payload.sender?.login)) {
+      if (latest?.event === 'assigned' && time(latest.created_at) >= startsAt && sameUser(latest.actor?.login, payload.sender?.login)) {
         const actor = latest.actor.login;
         let problem = '';
         if (sameUser(actor, target)) problem = 'Self-assignment is not allowed. Please ask another maintainer to assign you.';
@@ -339,8 +390,9 @@ async function run({ github, context, core, start, now = Date.now() }) {
           problem = assignmentProblem({ ...current, assignees: [] }, target, assignments.filter(i => i.number !== number));
         }
         if (problem) {
-          await unassign(number, target);
-          await say(number, `assignment-${latest.id}`, `@${target}, ${problem}`);
+          if (await unassign(number, target, async () => (await latestAssignment(number, target))?.id === latest.id)) {
+            await say(number, `assignment-${latest.id}`, `@${target}, ${problem}`);
+          }
         }
       }
       if ((await getIssue(number)).assignees.length) await addLabel(number, config.assignedLabel);
@@ -353,20 +405,29 @@ async function run({ github, context, core, start, now = Date.now() }) {
       await removeLabel(payload.pull_request.number, config.staleLabel);
     }
     await checkPR(payload.pull_request.number);
+    if (errors.length) throw new AggregateError(errors, errors.map(e => e.message).join('\n'));
     return;
   }
   const prs = await openPRs();
   const affectedIssue = payload.issue?.number;
   for (const pr of prs) {
     if (affectedIssue && !issueLinks(pr.body, repository).some(l => l.number === affectedIssue)) continue;
-    await checkPR(pr.number);
+    await attempt(`PR #${pr.number}`, () => checkPR(pr.number));
   }
   if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
     // Re-read after checks: untriaged PRs may have just been closed.
     const remaining = await openPRs();
-    if (issuesEnabled) await expireAssignments(remaining);
-    for (const pr of remaining) await expirePR(pr);
+    if (issuesEnabled) await attempt('Assignment expiry', () => expireAssignments(remaining));
+    for (const pr of remaining) await attempt(`PR #${pr.number} expiry`, () => expirePR(pr));
+    const cleanup = await list(api.issues.listForRepo, { state: 'all', labels: config.cleanupLabel });
+    for (const item of cleanup.filter(i => i.pull_request)) {
+      await attempt(`PR #${item.number} assignment cleanup`, async () => {
+        await releaseClosedPR(await getPR(item.number));
+        await removeLabel(item.number, config.cleanupLabel);
+      });
+    }
   }
+  if (errors.length) throw new AggregateError(errors, errors.map(e => e.message).join('\n'));
   core.info('Contribution policy processing completed.');
 }
 
