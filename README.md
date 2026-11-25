@@ -120,3 +120,20 @@ coverage runs. It defaults to `10`, preserving Go's default budget; callers
 with large migration or integration suites can set `30`. It must be a positive
 integer. This limits test execution, not compilation or the whole workflow,
 and does not change race detection or assertions inside tests.
+
+## Contribution policy
+
+The shared action at `.github/actions/contribution-policy` applies the same
+maintainer-assigned contribution policy to Kubescape repositories. Each
+repository uses a small caller workflow pinned to a full reviewed commit of this
+repository. The three-assignment limit is **per repository**, not organization-wide.
+
+The action rejects self-assignment, checks issue triage and PR ownership, and
+handles inactivity reminders and automatic closure. Repositories with issues
+disabled skip issue requirements but retain the stale requested-changes policy.
+Nothing executes contributor code with write permissions.
+
+See [installation and rollout](docs/contribution-policy.md). Shared behavior is
+tested with `node --test .github/actions/contribution-policy/tests/policy.test.cjs`;
+the rollout generator uses
+`python3 -m unittest discover -s tests -p 'test_contribution_policy_rollout.py' -v`.
