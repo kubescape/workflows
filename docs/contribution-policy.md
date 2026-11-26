@@ -89,10 +89,10 @@ this lifecycle. Bot reviews and outside contributors' reviews do not.
 
 ## Organization rollout
 
-Automatic reviews remain part of the normal maintainer routine. For this staged
-proposal rollout, dismiss the automatic review submissions when requested by
-the maintainer; do not disable reviewers or add repository/path exclusions.
-Dismissal does not establish that CI passed or that the pilot was validated.
+Automatic reviews remain part of the normal maintainer routine. Address review
+findings with code changes and reproducible evidence, and retain unresolved
+findings until their prerequisites are met. Do not disable reviewers or add
+repository/path exclusions to avoid review.
 
 1. First merge the organization-wide policy proposal in
    `kubescape/project-governance#41`. Next review the shared workflow in
@@ -187,3 +187,35 @@ Tooling note: actionlint v1.7.12 does not recognize GitHub's documented
 `concurrency.queue` property. When using that version, exclude only its
 `unexpected key "queue" for "concurrency" section` diagnostic. Keep the queue;
 removing it causes pending assignment commands to replace each other.
+
+## Reproducible review evidence
+
+Run from the workflows checkout with Node.js and Git available:
+
+```sh
+node scripts/contribution-policy-proof.cjs df625673d52f8eac4a4619069e83b8b19cd61c8b
+node scripts/contribution-policy-proof.cjs b65263209ccb370f0cb508f776cde7850ebfb6ee
+node --test .github/actions/contribution-policy/tests/policy.test.cjs
+python3 -m unittest discover -s tests -p 'test_contribution_policy_rollout.py' -v
+```
+
+The first two commands feed identical events through an in-memory GitHub API
+fixture. The base revision has no policy action, so the baseline is explicitly
+no policy execution. The second revision is the action currently pinned by the
+caller PRs. No network requests or real issue/PR mutations occur.
+
+| Same fixture input | Base: no policy | Pinned implementation |
+| --- | --- | --- |
+| Assigned, triaged PR | Open; no check | Open; success |
+| Non-assignee PR | Open; no check | Closed; failure |
+| `Fixes: #1` from non-assignee | Open; no check | Closed; failure |
+| Invalid PR sharing a head with an exempt maintainer PR | Both open; no check | Both open; aggregate failure |
+
+Repeating the same event updates one check run rather than creating additional
+runs. The shared suite passes 67 tests; the rollout generator passes four tests.
+The proof script asserts the results and is also run in policy CI against HEAD.
+
+This is offline behavior evidence, not a Kubevuln pilot. GitHub token permissions,
+fork behavior, event delivery and required-check rules must still be validated
+on Kubevuln after the proposal and workflow reviews. The same-head aggregate can
+block a valid sibling PR; maintainer acceptance of that tradeoff remains required.

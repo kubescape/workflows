@@ -6,6 +6,7 @@ on:
       - '.github/workflows/contribution-policy-tests.yaml'
       - 'templates/contribution-policy.yaml'
       - 'scripts/contribution-policy-rollout.py'
+      - 'scripts/contribution-policy-proof.cjs'
       - 'tests/test_contribution_policy_rollout.py'
   push:
     branches: [main]
@@ -14,6 +15,7 @@ on:
       - '.github/actions/contribution-policy/**'
       - 'templates/contribution-policy.yaml'
       - 'scripts/contribution-policy-rollout.py'
+      - 'scripts/contribution-policy-proof.cjs'
       - 'tests/test_contribution_policy_rollout.py'
 permissions:
   contents: read
@@ -24,5 +26,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - run: node --test .github/actions/contribution-policy/tests/policy.test.cjs
       - run: python3 -m unittest discover -s tests -p 'test_contribution_policy_rollout.py' -v
+      - name: Reproduce offline before and after behavior
+        run: |
+          node scripts/contribution-policy-proof.cjs df625673d52f8eac4a4619069e83b8b19cd61c8b
+          node scripts/contribution-policy-proof.cjs HEAD
