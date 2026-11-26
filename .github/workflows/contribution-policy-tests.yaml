@@ -1,0 +1,28 @@
+name: Test contribution policy
+on:
+  pull_request:
+    paths:
+      - '.github/actions/contribution-policy/**'
+      - '.github/workflows/contribution-policy-tests.yaml'
+      - 'templates/contribution-policy.yaml'
+      - 'scripts/contribution-policy-rollout.py'
+      - 'tests/test_contribution_policy_rollout.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/contribution-policy-tests.yaml'
+      - '.github/actions/contribution-policy/**'
+      - 'templates/contribution-policy.yaml'
+      - 'scripts/contribution-policy-rollout.py'
+      - 'tests/test_contribution_policy_rollout.py'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node --test .github/actions/contribution-policy/tests/policy.test.cjs
+      - run: python3 -m unittest discover -s tests -p 'test_contribution_policy_rollout.py' -v
