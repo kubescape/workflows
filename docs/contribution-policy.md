@@ -89,8 +89,15 @@ this lifecycle. Bot reviews and outside contributors' reviews do not.
 
 ## Organization rollout
 
-1. Merge the shared action in `kubescape/workflows` and the organization-wide
-   policy in `kubescape/project-governance` after maintainer review and approval.
+Automatic reviews remain part of the normal maintainer routine. For this staged
+proposal rollout, dismiss the automatic review submissions when requested by
+the maintainer; do not disable reviewers or add repository/path exclusions.
+Dismissal does not establish that CI passed or that the pilot was validated.
+
+1. First merge the organization-wide policy proposal in
+   `kubescape/project-governance#41`. Next review the shared workflow in
+   `kubescape/workflows#110` and merge it after maintainer approval. Then
+   validate the implementation in `kubescape/kubevuln#1270` before wider adoption.
    This changes the existing allowance for small issue-free PRs. The assignment
    cap is three **per repository**. Start with a pilot in `kubescape/kubevuln`;
    keep every other repository disabled until the pilot is reviewed.
