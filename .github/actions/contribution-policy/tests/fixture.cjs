@@ -18,20 +18,24 @@ function fixture({ issues = [issue(1, { assignees: [user('alice')] })], prs = []
   ]);
   let id = 100;
   const now = epoch + day * DAY;
+  let clock = now; // Advance with f.at(ms); comments, labels and closures are stamped with it.
+  const stamp = () => new Date(clock).toISOString();
   const endpoint = handler => async args => ({ data: structuredClone(await handler(args)) });
   const getItem = n => state.prs.get(n) ?? state.issues.get(n);
+  // Token-authored changes appear on the timeline with the bot as the actor.
+  const timeline = (n, event) => state.events.set(n, [...(state.events.get(n) ?? []), { id: id++, actor: user('github-actions[bot]', 'Bot'), created_at: stamp(), ...event }]);
   const rest = {
     issues: {
       get: endpoint(a => { const item = getItem(a.issue_number); if (!item) throw Object.assign(new Error('missing'), { status: 404 }); return state.prs.has(a.issue_number) ? { ...item, pull_request: {} } : item; }),
-      listForRepo: endpoint(a => [...state.issues.values(), ...[...state.prs.values()].map(p => ({...p, pull_request: {}}))].filter(i => (!a.state || a.state === 'all' || i.state === a.state) && (!a.assignee || i.assignees.some(u => u.login === a.assignee)) && (!a.labels || i.labels.some(l => l.name === a.labels)))),
+      listForRepo: endpoint(a => [...state.issues.values(), ...[...state.prs.values()].map(p => ({...p, pull_request: {}}))].filter(i => (!a.state || a.state === 'all' || i.state === a.state) && (!a.assignee || (a.assignee === '*' ? i.assignees.length > 0 : i.assignees.some(u => u.login === a.assignee))) && (!a.labels || i.labels.some(l => l.name === a.labels)))),
       listComments: endpoint(a => state.comments.get(a.issue_number) ?? []),
       getComment: endpoint(a => [...state.comments.values()].flat().find(c => c.id === a.comment_id)),
       listEventsForTimeline: endpoint(a => state.events.get(a.issue_number) ?? []),
-      createComment: endpoint(a => { const c = { id: id++, user: user('github-actions[bot]', 'Bot'), body: a.body, created_at: date(day), updated_at: date(day) }; state.comments.set(a.issue_number, [...(state.comments.get(a.issue_number) ?? []), c]); state.mutations.push(['comment', a.issue_number]); return c; }),
-      updateComment: endpoint(a => { const c = [...state.comments.values()].flat().find(c => c.id === a.comment_id); c.body = a.body; c.updated_at = date(day); return c; }),
-      addLabels: endpoint(a => { const item = getItem(a.issue_number); item.labels.push(...a.labels.map(label)); item.updated_at = date(day); return item.labels; }),
-      removeLabel: endpoint(a => { const item = getItem(a.issue_number); item.labels = item.labels.filter(l => l.name !== a.name); item.updated_at = date(day); return item.labels; }),
-      addAssignees: endpoint(a => { const item = getItem(a.issue_number); item.assignees.push(...a.assignees.map(u => user(u))); state.mutations.push(['assign', a.issue_number]); return item; }),
+      createComment: endpoint(a => { const c = { id: id++, user: user('github-actions[bot]', 'Bot'), body: a.body, created_at: stamp(), updated_at: stamp() }; state.comments.set(a.issue_number, [...(state.comments.get(a.issue_number) ?? []), c]); state.mutations.push(['comment', a.issue_number]); return c; }),
+      updateComment: endpoint(a => { const c = [...state.comments.values()].flat().find(c => c.id === a.comment_id); c.body = a.body; c.updated_at = stamp(); return c; }),
+      addLabels: endpoint(a => { const item = getItem(a.issue_number); item.labels.push(...a.labels.map(label)); item.updated_at = stamp(); return item.labels; }),
+      removeLabel: endpoint(a => { const item = getItem(a.issue_number); item.labels = item.labels.filter(l => l.name !== a.name); item.updated_at = stamp(); return item.labels; }),
+      addAssignees: endpoint(a => { const item = getItem(a.issue_number); item.assignees.push(...a.assignees.map(u => user(u))); for (const u of a.assignees) timeline(a.issue_number, { event: 'assigned', assignee: user(u) }); state.mutations.push(['assign', a.issue_number]); return item; }),
       removeAssignees: endpoint(a => { const item = getItem(a.issue_number); item.assignees = item.assignees.filter(u => !a.assignees.includes(u.login)); state.mutations.push(['unassign', a.issue_number]); return item; }),
     },
     pulls: {
@@ -39,7 +43,7 @@ function fixture({ issues = [issue(1, { assignees: [user('alice')] })], prs = []
       list: endpoint(a => [...state.prs.values()].filter(p => p.state === a.state)),
       listReviews: endpoint(a => state.reviews.get(a.pull_number) ?? []),
       listReviewComments: endpoint(a => state.inline.get(a.pull_number) ?? []),
-      update: endpoint(a => { const p = state.prs.get(a.pull_number); p.state = a.state; p.closed_at = date(day); state.mutations.push(['close', a.pull_number]); return p; }),
+      update: endpoint(a => { const p = state.prs.get(a.pull_number); p.state = a.state; p.closed_at = stamp(); timeline(a.pull_number, { event: a.state === 'closed' ? 'closed' : 'reopened' }); state.mutations.push(['close', a.pull_number]); return p; }),
     },
     checks: {
       listForRef: endpoint(a => [...state.checks.values()].filter(c => c.head_sha === a.ref && c.name === a.check_name)),
@@ -52,15 +56,16 @@ function fixture({ issues = [issue(1, { assignees: [user('alice')] })], prs = []
     },
   };
   const github = { rest, paginate: async (method, args) => { assert.equal(args.per_page, 100); return (await method(args)).data; } };
-  const execute = (eventName, payload = {}, overrides = {}) => policyRun({ github, context: { repo: { owner: repository.split('/')[0], repo: repository.split('/')[1] }, eventName, payload }, core: { info() {} }, start: date(0), now, ...overrides });
+  const execute = (eventName, payload = {}, overrides = {}) => policyRun({ github, context: { repo: { owner: repository.split('/')[0], repo: repository.split('/')[1] }, eventName, payload }, core: { info() {} }, start: date(0), now: clock, ...overrides });
   const command = async (number, body, login = 'alice') => {
-    const comment = { id: id++, user: user(login), body, created_at: date(day), updated_at: date(day) };
+    const comment = { id: id++, user: user(login), body, created_at: stamp(), updated_at: stamp() };
     state.comments.set(number, [...(state.comments.get(number) ?? []), comment]);
     const payload = { issue: structuredClone(state.issues.get(number)), comment };
     await execute('issue_comment', payload);
     return payload;
   };
-  return { state, execute, command, now, github };
+  const at = ms => { clock = ms; };
+  return { state, execute, command, now, github, at };
 }
 
 module.exports = { fixture, DAY, epoch, date, user, label, issue, pr };
