@@ -7,7 +7,8 @@ apply after activation, including to draft PRs.
 
 ## Picking up work
 
-1. New issues receive `status: needs-triage`. A maintainer reviews the issue and
+1. New issues receive `status: needs-triage`, except issues opened by a maintainer
+   with write, maintain or admin permission. For other issues, a maintainer
    removes the label when it is ready for work.
 2. Read the issue and its prerequisites, then ask a maintainer to assign you.
    **Self-assignment is not allowed**, including `/assign-me` and a maintainer
@@ -45,13 +46,15 @@ repositories or PR numbers do not satisfy this check.
 
 The **Contribution policy** check verifies that every referenced issue is open,
 triaged and assigned to the author. A missing link fails the check. A PR linked
-to an issue that is not assigned to its author is automatically closed with an
-explanation, including `Refs` PRs. Opening a PR does not automatically assign
+with a closing link to an issue that is not assigned to its author is automatically
+closed with an explanation. A non-assignee `Refs` link fails the check but does
+not trigger assignment-based closure. Opening a PR does not automatically assign
 its author to an issue.
 
 A fixing PR for an issue still labelled `status: needs-triage` is automatically
 closed with an explanation. `Refs` alone does not cause closure for missing
-triage, but still requires assignment and must not duplicate another PR.
+triage or assignment, but these failures remain visible in the check. An assigned
+`Refs` PR must not duplicate another PR.
 
 Only one open linked PR per issue is allowed. The earliest open PR from a current
 assignee is kept; later PRs referencing the same issue are closed with a link to
@@ -219,3 +222,11 @@ This is offline behavior evidence, not a Kubevuln pilot. GitHub token permission
 fork behavior, event delivery and required-check rules must still be validated
 on Kubevuln after the proposal and workflow reviews. The same-head aggregate can
 block a valid sibling PR; maintainer acceptance of that tradeoff remains required.
+
+### API usage during scheduled checks
+
+PR checks share one paginated open-PR snapshot per run. Successful closures remove
+the PR from that snapshot before duplicate checks and assignment cleanup. A single
+refresh before expiry includes PRs opened during checking; expiry operations share
+that refreshed list. Current PR, issue, assignment and pin state are still checked
+before a destructive update.

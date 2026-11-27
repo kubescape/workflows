@@ -391,11 +391,11 @@ test('repositories without issues skip issue requirements but retain stale revie
 });
 
 
-test('non-assignee PRs close for Fixes and Refs without releasing the rightful assignee', async () => {
+test('only fixing non-assignee PRs close; Refs still reports the assignment failure', async () => {
   for (const body of ['Fixes #1', 'Refs #1']) {
     const f = fixture({ prs: [pr(10, { user: user('bob'), body })] });
     await f.execute('pull_request_target', { pull_request: pr() });
-    assert.equal(f.state.prs.get(10).state, 'closed');
+    assert.equal(f.state.prs.get(10).state, body.startsWith('Fixes') ? 'closed' : 'open');
     assert.equal(f.state.checkWrites.at(-1).conclusion, 'failure');
     assert.deepEqual(f.state.issues.get(1).assignees, [user('alice')]);
     assert.match(f.state.comments.get(10).at(-1).body, /not assigned to issue #1/);
@@ -592,7 +592,7 @@ test('the final expiry read honors a new pin; explicit release still works', asy
   let reads = 0;
   f.github.rest.pulls.list = async args => {
     const response = await list(args);
-    if (++reads === 3) f.state.issues.get(1).labels.push(label(config.pinnedLabel));
+    if (++reads === 2) f.state.issues.get(1).labels.push(label(config.pinnedLabel));
     return response;
   };
   await f.execute('schedule');
@@ -649,4 +649,48 @@ test('assignments processed before opened still require explicit triage', async 
   assert.equal(f.state.checkWrites.at(-1).conclusion, 'failure');
   await f.execute('issues', { action: 'opened', issue: issue(1) });
   assert.equal(f.state.checkWrites.at(-1).conclusion, 'failure');
+});
+
+test('maintainer-opened issues skip triage even when a template supplies the label', async () => {
+  for (const permission of ['write', 'maintain', 'admin']) {
+    for (const labelled of [false, true]) {
+      const target = issue(1, { user: user('owner'), labels: labelled ? [label(config.needsTriageLabel)] : [] });
+      const f = fixture({ issues: [target] });
+      f.state.permissions.set('owner', permission);
+      f.state.events.set(1, []);
+      await f.execute('issues', { action: 'opened', issue: target });
+      assert.ok(!f.state.issues.get(1).labels.some(l => l.name === config.needsTriageLabel));
+      await f.command(1, '/assign @alice', 'maintainer');
+      assert.deepEqual(f.state.issues.get(1).assignees, [user('alice')]);
+    }
+  }
+});
+
+test('a maintainer opening someone else\'s queued issue event does not bypass triage', async () => {
+  const target = issue(1);
+  const f = fixture({ issues: [target] });
+  f.state.events.set(1, []);
+  await f.execute('issues', { action: 'opened', issue: target, sender: user('maintainer') });
+  assert.ok(f.state.issues.get(1).labels.some(l => l.name === config.needsTriageLabel));
+});
+
+test('scheduled checks paginate PRs a constant number of times for 220 PRs', async () => {
+  const issues = Array.from({ length: 220 }, (_, i) => issue(i + 1, { assignees: [user('alice')] }));
+  const prs = issues.map(i => pr(i.number + 1000, { body: `Fixes #${i.number}` }));
+  const f = fixture({ issues, prs });
+  const list = f.github.rest.pulls.list;
+  let listings = 0;
+  f.github.rest.pulls.list = args => { listings++; return list(args); };
+  await f.execute('schedule');
+  assert.equal(listings, 2); // one check snapshot, one refresh before expiry
+  assert.equal(f.state.checks.size, 220);
+  assert.ok([...f.state.checks.values()].every(c => c.conclusion === 'success'));
+});
+
+test('a closure updates the snapshot before another PR releases its assignment', async () => {
+  const f = fixture({ issues: [issue(1, { labels: [label(config.needsTriageLabel)], assignees: [user('alice')] })], prs: [pr(10), pr(11)] });
+  await f.execute('schedule');
+  assert.equal(f.state.prs.get(10).state, 'closed');
+  assert.equal(f.state.prs.get(11).state, 'closed');
+  assert.equal(f.state.issues.get(1).assignees.length, 0);
 });

@@ -77,7 +77,13 @@ async function run({ github, context, core, start, now = Date.now() }) {
   const getPR = async number => (await api.pulls.get({ ...repo, pull_number: number })).data;
   const comments = number => list(api.issues.listComments, { issue_number: number });
   const events = number => list(api.issues.listEventsForTimeline, { issue_number: number });
-  const openPRs = () => list(api.pulls.list, { state: 'open', sort: 'created', direction: 'asc' });
+  let openPRSnapshot;
+  const openPRs = async (refresh = false) => {
+    if (refresh || !openPRSnapshot) {
+      openPRSnapshot = await list(api.pulls.list, { state: 'open', sort: 'created', direction: 'asc' });
+    }
+    return openPRSnapshot;
+  };
   const latestAssignment = async (number, user) => (await events(number))
     .filter(e => ['assigned', 'unassigned'].includes(e.event) && sameUser(e.assignee?.login, user))
     .sort((a, b) => b.id - a.id)[0];
@@ -112,6 +118,12 @@ async function run({ github, context, core, start, now = Date.now() }) {
   }
   async function ensureTriage(number) {
     const issue = await getIssue(number);
+    // Templates may already have added the label. Maintainer-authored issues
+    // are triaged by their author, including when another event arrives first.
+    if (!issue.pull_request && issue.state === 'open' && time(issue.created_at) >= startsAt && await maintainer(issue.user.login)) {
+      await removeLabel(number, config.needsTriageLabel);
+      return getIssue(number);
+    }
     if (issue.pull_request || issue.state !== 'open' || time(issue.created_at) < startsAt || hasLabel(issue, config.needsTriageLabel)) return issue;
     // Label absence alone is not triage: the opened event may still be queued.
     if (!(await events(number)).some(e => e.event === 'unlabeled' && e.label?.name === config.needsTriageLabel)) {
@@ -203,6 +215,9 @@ async function run({ github, context, core, start, now = Date.now() }) {
     await say(pr.number, 'closure', `${reason}\n\nSee the [contribution guide](https://github.com/kubescape/project-governance/blob/main/CONTRIBUTING.md).`);
     if (!await canClose()) { await removeLabel(pr.number, config.cleanupLabel); return; }
     await api.pulls.update({ ...repo, pull_number: pr.number, state: 'closed' });
+    // Keep the cached list consistent before checking duplicates or releasing
+    // assignments. Do not paginate the entire repository after each closure.
+    if (openPRSnapshot) openPRSnapshot = openPRSnapshot.filter(p => p.number !== pr.number);
     await releaseClosedPR(await getPR(pr.number));
     await removeLabel(pr.number, config.cleanupLabel);
   }
@@ -226,17 +241,26 @@ async function run({ github, context, core, start, now = Date.now() }) {
         if (link.closes) closures.push(`Issue #${link.number} needs maintainer triage before a fixing PR can be reviewed. Please wait for triage and assignment, then reopen this PR.`);
       }
       if (!assignedTo(issue, pr.user.login)) {
-        const reason = `You are not assigned to issue #${link.number}. Please ask a maintainer to assign you before reopening this PR.`;
+        const reason = `You are not assigned to issue #${link.number}. Please ask a maintainer to assign you before this check can pass.`;
         failures.push(reason);
-        closures.push(reason);
+        if (link.closes) closures.push(reason);
       } else if (issue.state === 'open' && !hasLabel(issue, config.needsTriageLabel)) {
         candidates ??= await openPRs();
         // Keep the earliest open PR from a current assignee. An older PR by
         // someone without the assignment must not reserve the issue.
-        const duplicate = candidates.filter(other => other.number < pr.number &&
+        const possibleDuplicates = candidates.filter(other => other.number < pr.number &&
           assignedTo(issue, other.user.login) &&
           issueLinks(other.body, repository).some(l => l.number === link.number))
-          .sort((a, b) => a.number - b.number)[0];
+          .sort((a, b) => a.number - b.number);
+        let duplicate;
+        for (const snapshot of possibleDuplicates) {
+          const current = await getPR(snapshot.number);
+          if (current.state === 'open' && assignedTo(issue, current.user.login) &&
+              issueLinks(current.body, repository).some(l => l.number === link.number)) {
+            duplicate = current;
+            break;
+          }
+        }
         if (duplicate) {
           const reason = `Issue #${link.number} already has an open PR from a current assignee: #${duplicate.number}. Please continue there instead of opening a duplicate.`;
           failures.push(reason);
@@ -415,8 +439,9 @@ async function run({ github, context, core, start, now = Date.now() }) {
     await attempt(`PR #${pr.number}`, () => checkPR(pr.number));
   }
   if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
-    // Re-read after checks: untriaged PRs may have just been closed.
-    const remaining = await openPRs();
+    // Refresh once before expiry to include PRs opened during a long check run.
+    // All checks share one listing; all expiry operations share this second one.
+    const remaining = await openPRs(true);
     if (issuesEnabled) await attempt('Assignment expiry', () => expireAssignments(remaining));
     for (const pr of remaining) await attempt(`PR #${pr.number} expiry`, () => expirePR(pr));
     const cleanup = await list(api.issues.listForRepo, { state: 'all', labels: config.cleanupLabel });
