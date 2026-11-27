@@ -1,0 +1,22 @@
+name: Kubescape contribution policy
+description: Enforce maintainer assignment, issue triage and contribution lifecycle rules.
+inputs:
+  start:
+    description: UTC rollout timestamp; earlier PRs and assignments remain exempt.
+    required: true
+  github-token:
+    description: Token scoped to the calling repository.
+    default: ${{ github.token }}
+    required: false
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+      env:
+        POLICY_START: ${{ inputs.start }}
+        POLICY_ACTION_PATH: ${{ github.action_path }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const { run } = require(process.env.POLICY_ACTION_PATH + '/policy.cjs');
+          await run({ github, context, core, start: process.env.POLICY_START });
