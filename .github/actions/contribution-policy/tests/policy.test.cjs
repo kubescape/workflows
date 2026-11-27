@@ -1261,14 +1261,14 @@ test('recovery requires the author to have reopened the PR', async () => {
 
 test('recovery needs the record to be tied to the closure: a failed record write leaves recovery unavailable and reported', async () => {
   const f = prFixture({ issues: [assigned(), issue(2), issue(3), issue(4)] });
-  const update = f.github.rest.issues.updateComment;
-  f.github.rest.issues.updateComment = async a => { throw new Error('comment update outage'); };
+  const create = f.github.rest.issues.createComment;
+  f.github.rest.issues.createComment = async a => { if (/stale-closure-/.test(a.body)) throw new Error('comment update outage'); return create(a); };
   await runAt(f, ms(8));
   f.at(ms(15));
   await assert.rejects(f.execute('schedule'), /comment update outage/);
   assert.equal(f.state.prs.get(10).state, 'closed');
   assert.deepEqual(assigneeNames(f), []); // the release still happened
-  f.github.rest.issues.updateComment = update;
+  f.github.rest.issues.createComment = create;
   await reopen(f, ms(17));
   assert.equal(f.state.prs.get(10).state, 'closed');
   assert.deepEqual(assigneeNames(f), []);
@@ -1735,4 +1735,192 @@ test('thresholds come only from config and the old values are gone', () => {
   for (const stale of ['assignmentReminderDays', 'assignmentExpiryDays', 'requestedChangesStaleDays', 'stalePRCloseDays']) assert.equal(stale in config, false);
   const source = require('node:fs').readFileSync(require.resolve('../policy.cjs'), 'utf8');
   assert.doesNotMatch(source, /\b\d+ \* DAY\b/); // no hardcoded day counts: only DAY multiplied by a config value
+});
+
+// -- Review follow-ups ---------------------------------------------------------
+
+const spyIssueReads = (f, numbers) => {
+  const calls = [];
+  for (const method of ['get', 'listComments', 'listEventsForTimeline']) {
+    const original = f.github.rest.issues[method];
+    f.github.rest.issues[method] = async args => { if (numbers.includes(args.issue_number)) calls.push(`${method} #${args.issue_number}`); return original(args); };
+  }
+  return calls;
+};
+const quiet = promise => promise.catch(() => {});
+
+test('pre-rollout assigned issues are neither labelled nor read by any scheduled run', async () => {
+  const old = { created_at: date(-10), updated_at: date(-5) };
+  const f = fixture({ day: 1, issues: [issue(5, { ...old, assignees: [user('alice')] }), issue(6, { ...old, assignees: [user('bob')], labels: [label(config.assignedLabel)] })] });
+  for (const n of [5, 6]) f.state.events.set(n, [{ id: 1, event: 'assigned', actor: user('maintainer'), assignee: user('alice'), created_at: date(-9) }]);
+  const calls = spyIssueReads(f, [5, 6]);
+  for (const day of [10, 11, 30]) await runAt(f, ms(day));
+  assert.equal(hasLabelNamed(f.state.issues.get(5), config.assignedLabel), false, 'backlog issue stays unlabelled');
+  assert.deepEqual(f.state.mutations, [], 'nothing was written');
+  assert.deepEqual(calls, [], 'no detail, timeline or comment reads for backlog issues');
+  assert.deepEqual(f.state.issues.get(6).assignees.map(a => a.login), ['bob'], 'and nothing was released');
+});
+
+test('an assignment made after rollout on an older issue is still labelled, reminded and released', async () => {
+  const f = fixture({ day: 1, issues: [issue(5, { created_at: date(-10), updated_at: date(3), assignees: [user('alice')] })] });
+  f.state.events.set(5, [{ id: 1, event: 'assigned', actor: user('maintainer'), assignee: user('alice'), created_at: date(3) }]);
+  await runAt(f, ms(5));
+  assert.equal(hasLabelNamed(f.state.issues.get(5), config.assignedLabel), true);
+  await runAt(f, ms(10));
+  assert.equal(assignmentReminders(f, 5).length, 1);
+  await runAt(f, ms(17));
+  assert.deepEqual(f.state.issues.get(5).assignees, []);
+});
+
+test('closed issues never gain the Assigned label, including after a maintainer removes it', async () => {
+  const f = fixture({ day: 5, issues: [issue(1, { state: 'closed', assignees: [user('alice')] })] });
+  const closed = () => structuredClone(f.state.issues.get(1));
+  for (const action of ['unlabeled', 'labeled', 'unassigned']) {
+    await f.execute('issues', { action, issue: closed(), label: label(config.assignedLabel), assignee: user('alice'), sender: user('maintainer') });
+  }
+  await runAt(f, ms(6));
+  assert.equal(hasLabelNamed(f.state.issues.get(1), config.assignedLabel), false);
+  assert.deepEqual(f.state.mutations, []);
+  // The same edit on an open issue is still corrected from the live assignee list.
+  f.state.issues.get(1).state = 'open';
+  await f.execute('issues', { action: 'unlabeled', issue: closed(), label: label(config.assignedLabel), sender: user('maintainer') });
+  assert.equal(hasLabelNamed(f.state.issues.get(1), config.assignedLabel), true);
+});
+
+test('stale label: a failed label write after the reminder is repaired by the next run without a second reminder', async () => {
+  const f = prFixture();
+  const original = f.github.rest.issues.addLabels;
+  f.github.rest.issues.addLabels = async a => { throw Object.assign(new Error('label outage'), { status: 503 }); };
+  await quiet(runAt(f, ms(8)));
+  assert.equal(prReminders(f).length, 1);
+  assert.equal(hasLabelNamed(f.state.prs.get(10), config.staleLabel), false);
+  f.github.rest.issues.addLabels = original;
+  await runAt(f, ms(9));
+  assert.equal(hasLabelNamed(f.state.prs.get(10), config.staleLabel), true);
+  assert.equal(prReminders(f).length, 1);
+});
+
+test('stale label: a manually removed label is restored inside the window and the PR is never closed without it', async () => {
+  const f = prFixture();
+  await runAt(f, ms(8));
+  const strip = () => { f.state.prs.get(10).labels = f.state.prs.get(10).labels.filter(l => l.name !== config.staleLabel); };
+  strip();
+  await runAt(f, ms(10));
+  assert.equal(hasLabelNamed(f.state.prs.get(10), config.staleLabel), true);
+  assert.equal(prReminders(f).length, 1);
+  strip();
+  const original = f.github.rest.issues.addLabels;
+  f.github.rest.issues.addLabels = async () => { throw new Error('label outage'); };
+  await quiet(runAt(f, ms(15)));
+  assert.equal(f.state.prs.get(10).state, 'open', 'no closure while the label cannot be applied');
+  f.github.rest.issues.addLabels = original;
+  await runAt(f, ms(15, 1000));
+  assert.equal(f.state.prs.get(10).state, 'closed');
+  assert.equal(hasLabelNamed(f.state.prs.get(10), config.staleLabel), true);
+});
+
+test('an author comment written before the reopening does not answer the restarted window', async () => {
+  const f = await staleClosedAt();
+  f.state.comments.set(10, [...f.state.comments.get(10), { id: 7001, user: user('alice'), body: 'Sorry for the delay, reopening now', created_at: date(16), updated_at: date(16) }]);
+  await reopen(f, ms(17));
+  assert.equal(f.state.prs.get(10).state, 'open');
+  await runAt(f, ms(23));
+  assert.equal(prReminders(f).length, 1);
+  await runAt(f, ms(24));
+  assert.equal(prReminders(f).length, 2, 'the fresh window still produces its reminder');
+  await runAt(f, ms(31));
+  assert.equal(f.state.prs.get(10).state, 'closed', 'and its closure');
+});
+
+test('an author comment written after the reopening answers the restarted window', async () => {
+  const f = await staleClosedAt();
+  await reopen(f, ms(17));
+  f.state.comments.set(10, [...f.state.comments.get(10), { id: 7002, user: user('alice'), body: 'Working on it', created_at: new Date(ms(17, 3600e3)).toISOString(), updated_at: date(17) }]);
+  for (const day of [24, 31, 40]) await runAt(f, ms(day));
+  assert.equal(prReminders(f).length, 1);
+  assert.equal(f.state.prs.get(10).state, 'open');
+});
+
+test('closing: a failed close leaves no record and no false claim; a later close writes one record once', async () => {
+  const f = prFixture();
+  await runAt(f, ms(8));
+  const update = f.github.rest.pulls.update;
+  f.github.rest.pulls.update = async () => { throw Object.assign(new Error('Service Unavailable'), { status: 503 }); };
+  await quiet(runAt(f, ms(15)));
+  assert.equal(f.state.prs.get(10).state, 'open');
+  assert.equal(botTexts(f, 10, /Record for|stale-closure-/).length, 0, 'no record on an open PR');
+  f.github.rest.pulls.update = update;
+  await runAt(f, ms(16));
+  assert.equal(f.state.prs.get(10).state, 'closed');
+  await runAt(f, ms(17));
+  const records = botTexts(f, 10, /stale-closure-/);
+  assert.equal(records.length, 1, 'exactly one record');
+  const data = JSON.parse(records[0].body.match(/<!-- policy-data (\{.*\}) -->/)[1]);
+  assert.equal(data.closed, f.state.prs.get(10).closed_at, 'tied to the closure');
+  assert.doesNotMatch(records[0].body, /reopen/i, 'reopen instructions are only in the closure comment');
+  assert.equal(botTexts(f, 10, /kubescape-policy:closure -->/).length, 1);
+});
+
+// Aggregate limits: nothing is assigned, notified or rolled back when the whole recovery cannot fit.
+async function twoIssueClosure({ held = [], labels = [] } = {}) {
+  const heldIssues = held.map((n, i) => issue(n, { assignees: [user('alice')], labels: [label(config.pinnedLabel), ...(labels[i + 2] ? [label(labels[i + 2])] : [])] }));
+  const f = prFixture({ issues: [assigned('alice', { labels: [label(config.assignedLabel), ...(labels[0] ? [label(labels[0])] : [])] }),
+    assigned('alice', { number: 2, labels: [label(config.assignedLabel), ...(labels[1] ? [label(labels[1])] : [])] }), ...heldIssues], prs: [pr(10, { body: 'Fixes #1\nFixes #2' })] });
+  f.state.events.get(2).push({ id: 9, event: 'assigned', assignee: user('alice'), created_at: date(1) });
+  for (const n of held) f.state.events.set(n, [{ id: 1, event: 'assigned', actor: user('maintainer'), assignee: user('alice'), created_at: date(1) }]);
+  await closeAsStale(f);
+  return f;
+}
+
+test('recovery: a two-issue PR is refused as a whole when the combined count exceeds maxAssignments, with no assign or release churn', async () => {
+  const f = await twoIssueClosure({ held: [5, 6] }); // 2 held + 2 restored > 3
+  const before = f.state.mutations.length;
+  await reopenAt(f, 17);
+  assert.deepEqual([1, 2].map(n => assigneeNames(f, n)), [[], []]);
+  assert.equal(f.state.mutations.slice(before).filter(m => ['assign', 'unassign'].includes(m[0])).length, 0, 'no assignment and no rollback');
+  assert.equal(f.state.events.get(1).filter(e => e.event === 'assigned').length, 1, 'no assignment event was emitted');
+  assert.equal(refusals(f).length, 1);
+  assert.equal(restoredNotes(f).length, 0);
+});
+
+test('recovery: a two-issue PR that fits within maxAssignments is restored in full', async () => {
+  const f = await twoIssueClosure({ held: [5] }); // 1 held + 2 restored = 3
+  await reopenAt(f, 17);
+  assert.deepEqual([1, 2].map(n => assigneeNames(f, n)), [['alice'], ['alice']]);
+  assert.equal(restoredNotes(f).length, 1);
+});
+
+test('recovery: beginner-label capacity is checked across all targets before anything is assigned', async () => {
+  const first = 'good first issue';
+  const over = await twoIssueClosure({ held: [5], labels: [first, first, first] }); // 1 held + 2 restored > 2
+  const before = over.state.mutations.length;
+  await reopenAt(over, 17);
+  assert.deepEqual([1, 2].map(n => assigneeNames(over, n)), [[], []]);
+  assert.equal(over.state.mutations.slice(before).filter(m => ['assign', 'unassign'].includes(m[0])).length, 0);
+  assert.equal(refusals(over).length, 1);
+  const fits = await twoIssueClosure({ labels: [first, first] }); // 2 restored = 2
+  await reopenAt(fits, 17);
+  assert.deepEqual([1, 2].map(n => assigneeNames(fits, n)), [['alice'], ['alice']]);
+});
+
+test('recovery trusts a closing event only when its actor is a Bot account named like the policy bot', async () => {
+  const f = await staleClosedAt();
+  const closed = f.state.events.get(10).filter(e => e.event === 'closed').at(-1);
+  closed.actor = user('github-actions[bot]', 'User');
+  await reopen(f, ms(17));
+  assert.deepEqual(assigneeNames(f), []);
+  assert.equal(restoredNotes(f).length, 0);
+});
+
+test('a refused self-assignment synchronizes the label exactly once, inside the error handling', async () => {
+  const f = fixture({ day: 1, issues: [issue(1, { assignees: [user('alice')], labels: [label(config.assignedLabel)] })] });
+  f.state.events.get(1).push({ id: 9, event: 'assigned', actor: user('alice'), assignee: user('alice'), created_at: date(1) });
+  let readsAfterRelease = 0, released = false;
+  const remove = f.github.rest.issues.removeAssignees, get = f.github.rest.issues.get;
+  f.github.rest.issues.removeAssignees = async a => { released = true; return remove(a); };
+  f.github.rest.issues.get = async a => { if (released) readsAfterRelease++; return get(a); };
+  await f.execute('issues', { action: 'assigned', issue: structuredClone(f.state.issues.get(1)), assignee: user('alice'), sender: user('alice') });
+  assert.deepEqual(f.state.issues.get(1).assignees, []);
+  assert.equal(hasLabelNamed(f.state.issues.get(1), config.assignedLabel), false);
+  assert.equal(readsAfterRelease, 2, 'one read by the single synchronization (label removal check included), none by a second one');
 });

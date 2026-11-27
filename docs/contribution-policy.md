@@ -34,7 +34,9 @@ expiry, release after a PR closes, or reversal of a rejected assignment) and add
 is assigned. Removing one of several assignees keeps the label. The daily run
 repairs a wrong label in either direction, and a manual label edit is corrected
 from the current assignees. `/unassign-me` and `/unassign` say so when the user was not
-assigned instead of reporting a release, and are safe to repeat.
+assigned instead of reporting a release, and are safe to repeat. Closed issues are
+never labelled, and issues that nobody has touched since rollout are left unchanged
+and not read by the daily run.
 
 ### Assignment inactivity
 
@@ -108,7 +110,8 @@ state and again immediately before each assignment:
   qualifies, and neither does text typed by a contributor);
 - the author was assigned to every fixing issue being restored when the PR was closed;
 - each issue is still open and triaged, and nobody is assigned to it;
-- the author has fewer than three active assignments (and is within the beginner-label limit);
+- the author's current assignments plus all issues being restored stay within the three-assignment
+  and beginner-label limits (checked for the whole PR before anything is assigned);
 - no other eligible PR exists for the issue, and the PR still passes every other policy check.
 
 If any condition fails, nothing is assigned, a comment explains why and what to do
@@ -116,7 +119,7 @@ If any condition fails, nothing is assigned, a comment explains why and what to 
 assignment check. A closure gets one recovery attempt: reopening again after that, a
 repeated event, or an assignment later removed by a maintainer never triggers another.
 If an API call fails the PR is not closed and no outcome is recorded, so the next
-event or scheduled run retries. If the closure record could not be finalized,
+event or scheduled run retries. If the closure record could not be written,
 recovery is unavailable and a maintainer must assign the author. Recovery runs
 inside the normal policy check, so duplicate PR detection still applies afterwards.
 
@@ -136,7 +139,9 @@ The bot tracks whose turn it is on a PR with an outstanding change request from
 a human maintainer. Only the most recent valid request defines the window.
 
 - **Day 0:** a maintainer requests changes. The contributor's response window starts.
-- **Day 7 without a response:** the bot sends one reminder and adds `status: stale`.
+- **Day 7 without a response:** the bot sends one reminder and adds `status: stale`. A
+  later run restores the label if it failed to apply or was removed, and no PR is closed
+  without it.
 - **Day 14 without a response:** the PR is closed, provided the reminder was sent at
   least seven days earlier. A late reminder postpones closure; no PR is closed
   without a reminder, and a failed reminder blocks closure.
@@ -148,7 +153,7 @@ review**, and a PR in that state is never closed for contributor inactivity, how
 the review takes. A new change request starts a fresh window and reminder. Approval or
 dismissal of the request, and `📌 Pinned`, clear or prevent the stale state. Bot comments,
 other users' comments, labels, titles and other metadata updates never reset the window
-or count as a response, and `updated_at` is not used. Reopening a PR starts a new window.
+or count as a response, and `updated_at` is not used. Reopening a PR starts a new window; only responses written after the reopening count.
 The state is rechecked immediately before closing. If the reviewed commit or the request
 time cannot be established, the PR is not closed.
 
@@ -281,7 +286,7 @@ caller PRs. No network requests or real issue/PR mutations occur.
 | Invalid PR sharing a head with an exempt maintainer PR | Both open; no check | Both open; aggregate failure |
 
 Repeating the same event updates one check run rather than creating additional
-runs. The shared suite passes 67 tests; the rollout generator passes four tests.
+runs. The shared suite passes 153 tests; the rollout generator passes four tests.
 The proof script asserts the results and is also run in policy CI against HEAD.
 
 This is offline behavior evidence, not a Kubevuln pilot. GitHub token permissions,

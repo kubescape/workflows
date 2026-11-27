@@ -121,11 +121,21 @@ async function run({ github, context, core, start, now = Date.now() }) {
   }
   // The Assigned label mirrors the live assignee list. Always read the issue:
   // an event payload may describe an assignment that has since changed.
+  // Whether the issue's current assignment belongs to the policy: the issue was
+  // created after rollout, or someone was assigned after it. Issues untouched
+  // since rollout are never labelled, so the backlog is not mutated.
+  async function assignedSinceRollout(issue) {
+    if (time(issue.created_at) >= startsAt) return true;
+    if (issue.updated_at && time(issue.updated_at) < startsAt) return false;
+    return (await events(issue.number)).some(e => e.event === 'assigned' && time(e.created_at) >= startsAt &&
+      issue.assignees.some(a => sameUser(a.login, e.assignee?.login)));
+  }
   async function syncAssignedLabel(number) {
     const current = await getIssue(number);
-    if (current.pull_request) return;
-    if (current.assignees.length) await addLabel(number, config.assignedLabel);
-    else await removeLabel(number, config.assignedLabel);
+    // Closed issues are left alone: a maintainer's label edit there must stand.
+    if (current.pull_request || current.state !== 'open') return;
+    if (!current.assignees.length) await removeLabel(number, config.assignedLabel);
+    else if (hasLabel(current, config.assignedLabel) || await assignedSinceRollout(current)) await addLabel(number, config.assignedLabel);
   }
   async function ensureTriage(number) {
     const issue = await getIssue(number);
@@ -230,7 +240,7 @@ async function run({ github, context, core, start, now = Date.now() }) {
   // the bot, not a person, closed the PR and which fixing issues were assigned to
   // its author at that moment. Contributors cannot write or edit bot comments.
   const recordPrefix = '<!-- kubescape-policy:stale-closure-';
-  const recordText = data => `<!-- policy-data ${JSON.stringify(data)} -->\nRecord for @${data.user}: this PR was closed by the policy bot for inactivity. If you reopen it while the linked issue is still open, triaged, unassigned and nobody else has an eligible PR for it, the assignment can be restored automatically.`;
+  const recordText = data => `<!-- policy-data ${JSON.stringify(data)} -->\nRecord for @${data.user}: closed by the policy bot for inactivity.`;
   async function closePR(pr, reason, stillValid = async () => true, recordKey = '') {
     const canClose = async () => {
       const current = await getPR(pr.number);
@@ -240,7 +250,7 @@ async function run({ github, context, core, start, now = Date.now() }) {
     // Durable retry marker: token-authored closes do not start another run.
     await addLabel(pr.number, config.cleanupLabel);
     await say(pr.number, 'closure', `${reason}\n\nSee the [contribution guide](https://github.com/kubescape/project-governance/blob/main/CONTRIBUTING.md).`);
-    if (!await canClose()) { await removeLabel(pr.number, config.cleanupLabel); return; }
+    // Computed in memory: nothing about the record is visible until the PR is closed.
     let record;
     if (recordKey) {
       record = { user: pr.user.login, issues: [], closed: null };
@@ -248,11 +258,11 @@ async function run({ github, context, core, start, now = Date.now() }) {
         if (!closes) continue;
         try { if (assignedTo(await getIssue(number), pr.user.login)) record.issues.push(number); } catch (error) { if (error.status !== 404) throw error; }
       }
-      await say(pr.number, recordKey, recordText(record)); // Pending: not yet tied to a closure.
     }
+    if (!await canClose()) { await removeLabel(pr.number, config.cleanupLabel); return; }
     const { data: closed } = await api.pulls.update({ ...repo, pull_number: pr.number, state: 'closed' });
-    // Tie the record to this exact closure. If this write fails the record stays
-    // pending and recovery is simply unavailable: reported, never unsafe.
+    // Written once, tied to this exact closure. If this write fails recovery is
+    // simply unavailable: reported, never unsafe.
     if (record) await attempt(`Closure record for #${pr.number}`, () => say(pr.number, recordKey, recordText({ ...record, closed: closed.closed_at })));
     // Keep the cached list consistent before checking duplicates or releasing
     // assignments. Do not paginate the entire repository after each closure.
@@ -344,7 +354,7 @@ async function run({ github, context, core, start, now = Date.now() }) {
     const byTime = (a, b) => time(a.created_at) - time(b.created_at) || (a.id ?? 0) - (b.id ?? 0);
     const closedEvent = timeline.filter(e => e.event === 'closed').sort(byTime).at(-1);
     // The latest closure must be the bot's own, and the author must have reopened it afterwards.
-    if (!closedEvent || closedEvent.actor?.login !== BOT) return false;
+    if (!closedEvent || closedEvent.actor?.login !== BOT || closedEvent.actor?.type !== 'Bot') return false;
     const reopened = timeline.filter(e => e.event === 'reopened' && time(e.created_at) >= time(closedEvent.created_at)).sort(byTime).at(-1);
     if (!reopened || !sameUser(reopened.actor?.login, user)) return false;
     const discussion = await comments(pr.number);
@@ -396,6 +406,16 @@ async function run({ github, context, core, start, now = Date.now() }) {
     for (const number of targets) {
       const blocked = await problem(number);
       if (blocked) return refuse(blocked);
+    }
+    // Capacity across the whole recovery, decided before anything is assigned: the
+    // contributor's other open assignments plus every issue about to be restored.
+    const held = (await list(api.issues.listForRepo, { state: 'open', assignee: user })).filter(i => !targets.includes(i.number));
+    const planned = [];
+    for (const number of targets) {
+      const issue = await getIssue(number);
+      const blocked = assignmentProblem(issue, user, [...held, ...planned]);
+      if (blocked) return refuse(`#${number}: ${blocked}`);
+      planned.push({ ...issue, assignees: [{ login: user }] });
     }
     const restored = [];
     // All or nothing: whatever fails part-way (a refusal, a dropped assignee or an API error),
@@ -482,7 +502,9 @@ async function run({ github, context, core, start, now = Date.now() }) {
     const listed = [...await list(api.issues.listForRepo, { state: 'open', labels: config.assignedLabel }),
       ...await list(api.issues.listForRepo, { state: 'open', assignee: '*' })];
     // The listings only select candidates; syncAssignedLabel decides from live state.
-    const wrong = new Set(listed.filter(i => !i.pull_request && (i.assignees.length > 0) !== hasLabel(i, config.assignedLabel)).map(i => i.number));
+    // Pre-rollout issues are skipped from the listing data alone (no extra calls).
+    const wrong = new Set(listed.filter(i => !i.pull_request && (i.assignees.length > 0) !== hasLabel(i, config.assignedLabel) &&
+      (!i.assignees.length || time(i.updated_at) >= startsAt || time(i.created_at) >= startsAt)).map(i => i.number));
     for (const number of wrong) await attempt(`Assigned label sync for #${number}`, () => syncAssignedLabel(number));
   }
   const reminderGate = (reminder, notBefore) => {
@@ -497,7 +519,9 @@ async function run({ github, context, core, start, now = Date.now() }) {
     now - reminderAt >= config.reminderToActionDays * DAY;
   async function expireAssignments(prs) {
     const issues = await list(api.issues.listForRepo, { state: 'open', labels: config.assignedLabel });
-    for (const snapshot of issues.filter(i => !i.pull_request)) {
+    // An issue untouched since rollout cannot hold a post-rollout assignment; skip it
+    // without fetching its details, timeline or comments.
+    for (const snapshot of issues.filter(i => !i.pull_request && !(i.updated_at && time(i.updated_at) < startsAt))) {
       const issue = await getIssue(snapshot.number);
       if (hasLabel(issue, config.pinnedLabel)) continue;
       const timeline = await events(issue.number);
@@ -551,13 +575,14 @@ async function run({ github, context, core, start, now = Date.now() }) {
     const inline = await list(api.pulls.listReviewComments, { pull_number: pr.number });
     // Only the author's own comments, inline replies and reviews count. Bots, other
     // users, label changes and edits to PR metadata never answer a request.
-    const wrote = [...discussion, ...inline].some(c => sameUser(c.user?.login, pr.user.login) && time(c.created_at) > requestedAt) ||
-      reviews.some(r => sameUser(r.user?.login, pr.user.login) && time(r.submitted_at) > requestedAt);
+    // A reopening restarts the window, so only what the author wrote after it counts.
+    const reopenedAt = Math.max(0, ...(await events(pr.number)).filter(e => e.event === 'reopened').map(e => time(e.created_at)));
+    const windowStart = Math.max(requestedAt, reopenedAt);
+    const wrote = [...discussion, ...inline].some(c => sameUser(c.user?.login, pr.user.login) && time(c.created_at) > windowStart) ||
+      reviews.some(r => sameUser(r.user?.login, pr.user.login) && time(r.submitted_at) > windowStart);
     // A push shows as a head commit different from the one that was reviewed.
     const pushed = Boolean(request.commit_id) && request.commit_id !== pr.head.sha;
-    const reopenedAt = Math.max(0, ...(await events(pr.number)).filter(e => e.event === 'reopened').map(e => time(e.created_at)));
-    return { request, requestedAt, discussion, responded: wrote || pushed, known: Boolean(requestedAt && request.commit_id),
-      windowStart: Math.max(requestedAt, reopenedAt) };
+    return { request, requestedAt, discussion, responded: wrote || pushed, known: Boolean(requestedAt && request.commit_id), windowStart };
   }
   async function expirePR(snapshot) {
     const pr = await getPR(snapshot.number);
@@ -579,6 +604,9 @@ async function run({ github, context, core, start, now = Date.now() }) {
       return;
     }
     const reminderAt = reminderGate(reminder, state.windowStart);
+    // The reminder exists, so the PR must be stale: repair a label that failed to
+    // apply or was removed, and never close without it.
+    if (reminderAt) await addLabel(pr.number, config.staleLabel);
     // Without a verifiable reviewed commit a push cannot be ruled out: do not close.
     if (!reminderAt || !state.known || !actionDue(state.windowStart, reminderAt)) return;
     await closePR(pr, `Closing because the requested changes received no response for ${config.inactivityExpiryDays} days, including ${config.reminderToActionDays} days after the reminder.\n\nTo continue, reopen this PR. If the linked issue is still open, triaged and unassigned, you are under the assignment limit and no other eligible PR exists for it, your assignment is restored automatically and a new response window starts (reminder after ${config.inactivityReminderDays} days, closure after ${config.inactivityExpiryDays}). Otherwise you will be told why; ask a maintainer to assign you, or coordinate with the current assignee.`, async current => {
@@ -607,6 +635,7 @@ async function run({ github, context, core, start, now = Date.now() }) {
     const target = payload.assignee?.login;
     const current = await ensureTriage(number);
     if (target && assignedTo(current, target)) {
+      let synced = false;
       const timeline = await events(number);
       const latest = timeline.filter(e => ['assigned', 'unassigned'].includes(e.event) && sameUser(e.assignee?.login, target))
         .sort((a, b) => b.id - a.id)[0];
@@ -620,13 +649,12 @@ async function run({ github, context, core, start, now = Date.now() }) {
           const assignments = await list(api.issues.listForRepo, { state: 'open', assignee: target });
           problem = assignmentProblem({ ...current, assignees: [] }, target, assignments.filter(i => i.number !== number));
         }
-        if (problem) {
-          if (await unassign(number, target, async () => (await latestAssignment(number, target))?.id === latest.id)) {
-            await say(number, `assignment-${latest.id}`, `@${target}, ${problem}`);
-          }
+        if (problem && await unassign(number, target, async () => (await latestAssignment(number, target))?.id === latest.id)) {
+          synced = true; // unassign() already synchronized the label.
+          await say(number, `assignment-${latest.id}`, `@${target}, ${problem}`);
         }
       }
-      await syncAssignedLabel(number);
+      if (!synced) await attempt(`Assigned label sync for #${number}`, () => syncAssignedLabel(number));
     }
   }
   if (eventName === 'pull_request_target') {
