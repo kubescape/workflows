@@ -131,10 +131,10 @@ async function run({ github, context, core, start, now = Date.now() }) {
     }
     return getIssue(number);
   }
-  async function unassign(number, user, guard = async () => true, protectPinned = false) {
+  async function unassign(number, user, guard = async () => true, finalGuard) {
     if (!await guard()) return false;
     const issue = await getIssue(number);
-    if (protectPinned && (issue.state !== 'open' || hasLabel(issue, config.pinnedLabel))) return false;
+    if (finalGuard && !await finalGuard(issue)) return false;
     if (assignedTo(issue, user)) await api.issues.removeAssignees({ ...repo, issue_number: number, assignees: [user] });
     if (!(await getIssue(number)).assignees.length) await removeLabel(number, config.assignedLabel);
     return true;
@@ -323,7 +323,9 @@ async function run({ github, context, core, start, now = Date.now() }) {
       const discussion = await comments(issue.number);
       for (const assignee of issue.assignees) {
         if (await maintainer(assignee.login)) continue;
-        if (prs.some(p => sameUser(p.user.login, assignee.login) && issueLinks(p.body, repository).some(l => l.number === issue.number))) continue;
+        const hasLinkedPR = open => open.some(p => sameUser(p.user.login, assignee.login) &&
+          issueLinks(p.body, repository).some(l => l.number === issue.number));
+        if (hasLinkedPR(prs)) continue;
         const assignedAt = Math.max(0, ...timeline.filter(e => e.event === 'assigned' && sameUser(e.assignee?.login, assignee.login)).map(e => time(e.created_at)));
         if (assignedAt < startsAt) continue;
         const activity = assignmentActivity(timeline, discussion, assignee.login);
@@ -337,9 +339,14 @@ async function run({ github, context, core, start, now = Date.now() }) {
           if (current.state !== 'open' || hasLabel(current, config.pinnedLabel) || !assignedTo(current, assignee.login)) continue;
           const currentActivity = assignmentActivity(await events(issue.number), await comments(issue.number), assignee.login);
           if (currentActivity !== activity) continue;
-          if ((await openPRs()).some(p => sameUser(p.user.login, assignee.login) && issueLinks(p.body, repository).some(l => l.number === issue.number))) continue;
-          if (!await unassign(issue.number, assignee.login, async () =>
-            assignmentActivity(await events(issue.number), await comments(issue.number), assignee.login) === activity, true)) continue;
+          const released = await unassign(issue.number, assignee.login,
+            async () => assignmentActivity(await events(issue.number), await comments(issue.number), assignee.login) === activity,
+            async latest => {
+              if (latest.state !== 'open' || hasLabel(latest, config.pinnedLabel) || !assignedTo(latest, assignee.login)) return false;
+              // A PR may have opened while expiry was checking issue state and activity.
+              return !hasLinkedPR(await openPRs(true));
+            });
+          if (!released) continue;
           await say(issue.number, `expired-${assignee.login}-${activity}`, `@${assignee.login}, this assignment was released after inactivity. Ask a maintainer to reassign you if you want to continue.`);
         } else if (age >= config.assignmentReminderDays && !warning) {
           await say(issue.number, key, `@${assignee.login}, please share an update or open a linked draft PR. Assignments may be released after ${config.assignmentExpiryDays} days without progress. Ask a maintainer to pin this issue if you need more time.`);
@@ -440,7 +447,7 @@ async function run({ github, context, core, start, now = Date.now() }) {
   }
   if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
     // Refresh once before expiry to include PRs opened during a long check run.
-    // All checks share one listing; all expiry operations share this second one.
+    // Expiry uses this snapshot to screen candidates before checking for new work.
     const remaining = await openPRs(true);
     if (issuesEnabled) await attempt('Assignment expiry', () => expireAssignments(remaining));
     for (const pr of remaining) await attempt(`PR #${pr.number} expiry`, () => expirePR(pr));

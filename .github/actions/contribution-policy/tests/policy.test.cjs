@@ -601,6 +601,31 @@ test('the final expiry read honors a new pin; explicit release still works', asy
   assert.equal(f.state.issues.get(1).assignees.length, 0);
 });
 
+test('a linked draft opened during the final expiry read keeps its assignment', async () => {
+  const f = fixture({ day: 15, issues: [issue(1, { labels: [label(config.assignedLabel)], assignees: [user('alice')] })] });
+  f.state.comments.set(1, [{ id: 1, user: user('github-actions[bot]', 'Bot'), created_at: date(5), body: `<!-- kubescape-policy:assignment-reminder-alice-${epoch + DAY} -->` }]);
+  const draft = pr(10, { draft: true, created_at: date(15), updated_at: date(15) });
+  const getIssue = f.github.rest.issues.get;
+  let reads = 0;
+  f.github.rest.issues.get = async args => {
+    const response = await getIssue(args);
+    // The scheduled run has already read its PR snapshot and rechecked activity.
+    if (args.issue_number === 1 && ++reads === 3) f.state.prs.set(draft.number, draft);
+    return response;
+  };
+
+  await f.execute('schedule');
+  await f.execute('pull_request_target', { action: 'opened', pull_request: draft });
+
+  assert.deepEqual({
+    assignees: f.state.issues.get(1).assignees,
+    prState: f.state.prs.get(draft.number)?.state,
+    check: f.state.checkWrites.at(-1)?.conclusion,
+  }, { assignees: [user('alice')], prState: 'open', check: 'success' });
+  assert.deepEqual(f.state.issues.get(1).labels, [label(config.assignedLabel)]);
+  assert.deepEqual(f.state.mutations, []);
+});
+
 test('a scheduled run retries cleanup after closing succeeded but release failed', async () => {
   const f = fixture({ issues: [issue(1, { labels: [label(config.needsTriageLabel), label(config.assignedLabel)], assignees: [user('alice')] })], prs: [pr()] });
   const remove = f.github.rest.issues.removeAssignees;
