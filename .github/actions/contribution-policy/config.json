@@ -1,0 +1,14 @@
+{
+  "needsTriageLabel": "status: needs-triage",
+  "assignedLabel": "📍 Assigned",
+  "pinnedLabel": "📌 Pinned",
+  "staleLabel": "status: stale",
+  "cleanupLabel": "status: policy-release-pending",
+  "maxAssignments": 3,
+  "beginnerLabels": ["good first issue", "good second issue"],
+  "maxBeginnerAssignmentsPerLabel": 2,
+  "assignmentReminderDays": 4,
+  "assignmentExpiryDays": 14,
+  "requestedChangesStaleDays": 3,
+  "stalePRCloseDays": 7
+}
