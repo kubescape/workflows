@@ -227,6 +227,7 @@ block a valid sibling PR; maintainer acceptance of that tradeoff remains require
 
 PR checks share one paginated open-PR snapshot per run. Successful closures remove
 the PR from that snapshot before duplicate checks and assignment cleanup. A single
-refresh before expiry includes PRs opened during checking; expiry operations share
-that refreshed list. Current PR, issue, assignment and pin state are still checked
-before a destructive update.
+refresh before expiry includes PRs opened during checking. Assignment expiry
+refreshes the open-PR list again immediately before removing an inactive assignee.
+Current PR, issue, assignment and pin state are still checked before a destructive
+update.
