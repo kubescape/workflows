@@ -28,13 +28,34 @@ apply after activation, including to draft PRs.
    retain control of repository settings; this workflow enforces the process
    while enabled, rather than removing their platform permissions.
 
-An inactive assignment receives a reminder after four days and becomes eligible
-for release after 14 days without progress. The bot waits at least one day after
-a reminder before releasing it. A progress comment by the assignee resets the timer; bot
-comments do not. An open linked PR, including a draft, protects that author's
-assignment. Maintainers can apply `📌 Pinned` for longer work. Assignments begun
-before rollout, assignments with unknown start times, and maintainer assignments
-are not expired automatically.
+The `📍 Assigned` label always mirrors the live assignee list: it is removed when
+the last assignee is removed (by `/unassign-me`, `/unassign @user`, the GitHub UI,
+expiry, release after a PR closes, or reversal of a rejected assignment) and added when someone
+is assigned. Removing one of several assignees keeps the label. The daily run
+repairs a wrong label in either direction, and a manual label edit is corrected
+from the current assignees. `/unassign-me` and `/unassign` say so when the user was not
+assigned instead of reporting a release, and are safe to repeat. Closed issues are
+never labelled, and issues that nobody has touched since rollout are left unchanged
+and not read by the daily run.
+
+### Assignment inactivity
+
+- **Day 0:** the contributor is assigned, or comments on the issue (qualifying
+  activity restarts the cycle).
+- **Day 7 without activity:** the bot sends one reminder.
+- **Day 14 without activity:** the assignment is released, provided the reminder
+  was sent at least seven days earlier.
+
+If a scheduled run misses day 7, the reminder goes out on the next run and the
+release waits a further seven days after it. No assignment is released without a
+reminder, and a failed reminder blocks the release. Only the assignee's own
+comments count: bot comments and other users' comments do not. An open linked PR,
+including a draft, protects that author's assignment, and the open-PR list is read
+again immediately before a release. Maintainers can apply `📌 Pinned` for longer work.
+Assignments begun before rollout, assignments with unknown start times, and
+maintainer assignments are not expired automatically. Timestamps come from GitHub
+and are compared in UTC; a reminder with a missing or malformed timestamp never
+allows a release.
 
 ## Opening and updating a PR
 
@@ -56,16 +77,51 @@ closed with an explanation. `Refs` alone does not cause closure for missing
 triage or assignment, but these failures remain visible in the check. An assigned
 `Refs` PR must not duplicate another PR.
 
-Only one open linked PR per issue is allowed. The earliest open PR from a current
-assignee is kept; later PRs referencing the same issue are closed with a link to
-it. Both `Fixes` and `Refs` count, including draft PRs. An earlier PR from someone
-who is not assigned does not block the assignee. Split independent work into
+Only one open linked PR per issue is allowed. A PR can block a later PR only if
+it is itself eligible: its linked issues exist, are open and triaged, and its
+author is assigned. Eligibility is decided without looking at other PRs, so an
+invalid earlier PR (for example one that also links a nonexistent issue) never blocks a
+valid later one. Among eligible PRs the one with the lowest number is kept and
+later PRs are closed with a link to it, whatever order events arrive in. Both `Fixes` and `Refs` count, including
+draft PRs. Opening, reopening, editing or closing a PR, and issue events such as
+unassignment, validate every other open PR that shares a linked issue again, so
+two eligible duplicates never both keep a passing check. Split independent work into
 separate issues. Assignment and duplicate state are checked again before closing.
 
 A pinned PR is protected from automatic closure but must still pass the check to
-merge. After triage and assignment, reopen the same PR if no earlier linked PR
-is already covering the issue. Event checks run when GitHub dispatches the
-workflow; closure is not synchronous with submitting a PR.
+merge. Event checks run when GitHub dispatches the workflow; closure is not
+synchronous with submitting a PR.
+
+**Reopening a closed PR.** A reopened PR is validated like a new one: it must link
+issues that are open, triaged and assigned to its author, with no earlier eligible PR
+for the same issue, or it is closed again with the reason. Reopening never takes an
+issue from another contributor.
+
+**Automatic recovery after an inactivity closure.** When the bot closes a PR for
+inactivity it releases the author's assignment and writes a hidden record on the PR
+(the author, the fixing issues assigned at that moment, and the exact closure time).
+If the **author** reopens that PR, the assignment is restored automatically, the
+`📍 Assigned` label is added back, and a new response window starts (any earlier
+reminder is ignored). This happens only when all of these hold, checked on the live
+state and again immediately before each assignment:
+
+- the latest closure of the PR was made by the bot and matches a bot-written record
+  for this author (a closure by a person, or by the bot for any other reason, never
+  qualifies, and neither does text typed by a contributor);
+- the author was assigned to every fixing issue being restored when the PR was closed;
+- each issue is still open and triaged, and nobody is assigned to it;
+- the author's current assignments plus all issues being restored stay within the three-assignment
+  and beginner-label limits (checked for the whole PR before anything is assigned);
+- no other eligible PR exists for the issue, and the PR still passes every other policy check.
+
+If any condition fails, nothing is assigned, a comment explains why and what to do
+(normally: ask a maintainer to assign you), and the PR is closed again by the normal
+assignment check. A closure gets one recovery attempt: reopening again after that, a
+repeated event, or an assignment later removed by a maintainer never triggers another.
+If an API call fails the PR is not closed and no outcome is recorded, so the next
+event or scheduled run retries. If the closure record could not be written,
+recovery is unavailable and a maintainer must assign the author. Recovery runs
+inside the normal policy check, so duplicate PR detection still applies afterwards.
 
 Closing an unmerged PR releases its author's linked fixing-issue assignments,
 unless another open linked PR by that author still uses the issue or the issue
@@ -79,16 +135,31 @@ not an editable title prefix or branch name.
 
 ## Requested changes and inactivity
 
-A PR with an outstanding change request from a human maintainer is marked
-`status: stale` after three inactive days. A warning gives the author seven more
-days to push changes or reply before automatic closure. PRs simply waiting for a
-review are not closed. New commits, author replies, approval or dismissal of the
-request, and `📌 Pinned` protect against closure. These checks run daily, so
-labels may take until the next scheduled run to update. Inline replies count.
-Reopening a PR starts a new inactivity warning window.
+The bot tracks whose turn it is on a PR with an outstanding change request from
+a human maintainer. Only the most recent valid request defines the window.
 
-Only reviewers with repository write, maintain or admin permission can trigger
-this lifecycle. Bot reviews and outside contributors' reviews do not.
+- **Day 0:** a maintainer requests changes. The contributor's response window starts.
+- **Day 7 without a response:** the bot sends one reminder and adds `status: stale`. A
+  later run restores the label if it failed to apply or was removed, and no PR is closed
+  without it.
+- **Day 14 without a response:** the PR is closed, provided the reminder was sent at
+  least seven days earlier. A late reminder postpones closure; no PR is closed
+  without a reminder, and a failed reminder blocks closure.
+
+A response is a push (the head commit differs from the commit that was reviewed), or
+the author's own comment, inline reply or review after the request. A response does
+not claim that the findings are fixed: it means the PR is **waiting for maintainer
+review**, and a PR in that state is never closed for contributor inactivity, however long
+the review takes. A new change request starts a fresh window and reminder. Approval or
+dismissal of the request, and `📌 Pinned`, clear or prevent the stale state. Bot comments,
+other users' comments, labels, titles and other metadata updates never reset the window
+or count as a response, and `updated_at` is not used. Reopening a PR starts a new window; only responses written after the reopening count.
+The state is rechecked immediately before closing. If the reviewed commit or the request
+time cannot be established, the PR is not closed.
+
+These checks run daily, so labels may take until the next scheduled run to update.
+Only reviewers with repository write, maintain or admin permission can trigger this
+lifecycle. Bot reviews and outside contributors' reviews do not.
 
 ## Organization rollout
 
@@ -149,7 +220,7 @@ To disable automation, remove `CONTRIBUTION_POLICY_START` and remove the require
 status from the ruleset together, so PRs are not left waiting for a disabled check.
 Keep the original rollout timestamp when re-enabling to preserve exemptions.
 
-Values live in `.github/actions/contribution-policy/config.json` in `kubescape/workflows`. Commands are serialized across
+Values live in `.github/actions/contribution-policy/config.json` in `kubescape/workflows`; `inactivityReminderDays` (7), `inactivityExpiryDays` (14) and `reminderToActionDays` (7) are the only source of the timing rules above. Reminder state is kept in marker comments written by the bot, so it survives independent runs. Commands are serialized across
 the repository using a concurrency queue, and current state is fetched before
 assignment. GitHub queues at most 100 pending runs; a command dropped because the
 queue is full needs to be posted again. Scheduled runs reconcile PR checks, but
@@ -215,7 +286,7 @@ caller PRs. No network requests or real issue/PR mutations occur.
 | Invalid PR sharing a head with an exempt maintainer PR | Both open; no check | Both open; aggregate failure |
 
 Repeating the same event updates one check run rather than creating additional
-runs. The shared suite passes 67 tests; the rollout generator passes four tests.
+runs. The shared suite passes 153 tests; the rollout generator passes four tests.
 The proof script asserts the results and is also run in policy CI against HEAD.
 
 This is offline behavior evidence, not a Kubevuln pilot. GitHub token permissions,

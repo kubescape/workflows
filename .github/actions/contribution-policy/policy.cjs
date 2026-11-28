@@ -114,7 +114,28 @@ async function run({ github, context, core, start, now = Date.now() }) {
     if (!hasLabel(await getIssue(number), label)) await api.issues.addLabels({ ...repo, issue_number: number, labels: [label] });
   }
   async function removeLabel(number, label) {
-    if (hasLabel(await getIssue(number), label)) await api.issues.removeLabel({ ...repo, issue_number: number, name: label });
+    if (!hasLabel(await getIssue(number), label)) return;
+    try { await api.issues.removeLabel({ ...repo, issue_number: number, name: label }); } catch (error) {
+      if (error.status !== 404) throw error; // Already removed by someone else.
+    }
+  }
+  // The Assigned label mirrors the live assignee list. Always read the issue:
+  // an event payload may describe an assignment that has since changed.
+  // Whether the issue's current assignment belongs to the policy: the issue was
+  // created after rollout, or someone was assigned after it. Issues untouched
+  // since rollout are never labelled, so the backlog is not mutated.
+  async function assignedSinceRollout(issue) {
+    if (time(issue.created_at) >= startsAt) return true;
+    if (issue.updated_at && time(issue.updated_at) < startsAt) return false;
+    return (await events(issue.number)).some(e => e.event === 'assigned' && time(e.created_at) >= startsAt &&
+      issue.assignees.some(a => sameUser(a.login, e.assignee?.login)));
+  }
+  async function syncAssignedLabel(number) {
+    const current = await getIssue(number);
+    // Closed issues are left alone: a maintainer's label edit there must stand.
+    if (current.pull_request || current.state !== 'open') return;
+    if (!current.assignees.length) await removeLabel(number, config.assignedLabel);
+    else if (hasLabel(current, config.assignedLabel) || await assignedSinceRollout(current)) await addLabel(number, config.assignedLabel);
   }
   async function ensureTriage(number) {
     const issue = await getIssue(number);
@@ -131,12 +152,14 @@ async function run({ github, context, core, start, now = Date.now() }) {
     }
     return getIssue(number);
   }
-  async function unassign(number, user, guard = async () => true, protectPinned = false) {
+  async function unassign(number, user, guard = async () => true, finalGuard = async () => true) {
     if (!await guard()) return false;
     const issue = await getIssue(number);
-    if (protectPinned && (issue.state !== 'open' || hasLabel(issue, config.pinnedLabel))) return false;
+    if (!await finalGuard(issue)) return false;
     if (assignedTo(issue, user)) await api.issues.removeAssignees({ ...repo, issue_number: number, assignees: [user] });
-    if (!(await getIssue(number)).assignees.length) await removeLabel(number, config.assignedLabel);
+    // The release already happened. A label failure is reported at the end of the
+    // run and repaired by the scheduled reconciliation; it must not hide the release.
+    await attempt(`Assigned label sync for #${number}`, () => syncAssignedLabel(number));
     return true;
   }
   async function handleCommand(payload) {
@@ -151,7 +174,12 @@ async function run({ github, context, core, start, now = Date.now() }) {
     if (!match) return;
     const number = payload.issue.number;
     const key = `command-${comment.id}`;
-    if ((await comments(number)).some(c => botComment(c, `<!-- kubescape-policy:${key} -->`))) return;
+    if ((await comments(number)).some(c => botComment(c, `<!-- kubescape-policy:${key} -->`))) {
+      // A rerun after a partial failure must still repair the label for a release
+      // that was already confirmed.
+      if (match[1].startsWith('unassign')) await syncAssignedLabel(number);
+      return;
+    }
     const actor = comment.user.login;
     const manual = Boolean(match[2] || match[3]);
     if (manual && !await maintainer(actor)) {
@@ -164,8 +192,12 @@ async function run({ github, context, core, start, now = Date.now() }) {
       return;
     }
     if (match[1].startsWith('unassign')) {
-      await unassign(number, user);
-      await say(number, key, `@${user}, your assignment has been released.`);
+      const wasAssigned = assignedTo(await getIssue(number), user);
+      if (wasAssigned) await unassign(number, user);
+      else await attempt(`Assigned label sync for #${number}`, () => syncAssignedLabel(number));
+      // Never claim a release (or ping the user) when there was nothing to release.
+      await say(number, key, wasAssigned ? `@${user}, your assignment has been released.`
+        : `@${actor}, ${sameUser(user, actor) ? 'you are' : `${user} is`} not assigned to this issue.`);
       return;
     }
     const issue = await ensureTriage(number);
@@ -181,7 +213,7 @@ async function run({ github, context, core, start, now = Date.now() }) {
     }
     await api.issues.addAssignees({ ...repo, issue_number: number, assignees: [user] });
     await addLabel(number, config.assignedLabel);
-    await say(number, key, `@${user}, assigned. Please share progress or open a linked draft PR. Inactive assignments receive a reminder after ${config.assignmentReminderDays} days and may be released after ${config.assignmentExpiryDays} days. Use /unassign-me if you cannot continue.`);
+    await say(number, key, `@${user}, assigned. Please share progress or open a linked draft PR. Without progress you will get a reminder after ${config.inactivityReminderDays} days, and the assignment may be released after ${config.inactivityExpiryDays} days, at least ${config.reminderToActionDays} days after that reminder. Use /unassign-me if you cannot continue.`);
   }
   async function releaseClosedPR(pr) {
     if (pr.state !== 'closed' || pr.merged || time(pr.created_at) < startsAt || pr.user.type === 'Bot' || await maintainer(pr.user.login)) return;
@@ -204,71 +236,218 @@ async function run({ github, context, core, start, now = Date.now() }) {
       await say(number, `closed-${pr.number}`, `@${pr.user.login}, your assignment was released because #${pr.number} closed without merging. Ask a maintainer if you want to resume.`);
     }
   }
-  async function closePR(pr, reason, eligible = async () => true) {
+  // A bot-written record of one inactivity closure. It is what later proves that
+  // the bot, not a person, closed the PR and which fixing issues were assigned to
+  // its author at that moment. Contributors cannot write or edit bot comments.
+  const recordPrefix = '<!-- kubescape-policy:stale-closure-';
+  const recordText = data => `<!-- policy-data ${JSON.stringify(data)} -->\nRecord for @${data.user}: closed by the policy bot for inactivity.`;
+  async function closePR(pr, reason, stillValid = async () => true, recordKey = '') {
     const canClose = async () => {
       const current = await getPR(pr.number);
-      return current.state === 'open' && current.head.sha === pr.head.sha && current.body === pr.body && !hasLabel(current, config.pinnedLabel) && await eligible(current);
+      return current.state === 'open' && current.head.sha === pr.head.sha && current.body === pr.body && !hasLabel(current, config.pinnedLabel) && await stillValid(current);
     };
     if (!await canClose()) return;
     // Durable retry marker: token-authored closes do not start another run.
     await addLabel(pr.number, config.cleanupLabel);
     await say(pr.number, 'closure', `${reason}\n\nSee the [contribution guide](https://github.com/kubescape/project-governance/blob/main/CONTRIBUTING.md).`);
+    // Computed in memory: nothing about the record is visible until the PR is closed.
+    let record;
+    if (recordKey) {
+      record = { user: pr.user.login, issues: [], closed: null };
+      for (const { number, closes } of issueLinks(pr.body, repository)) {
+        if (!closes) continue;
+        try { if (assignedTo(await getIssue(number), pr.user.login)) record.issues.push(number); } catch (error) { if (error.status !== 404) throw error; }
+      }
+    }
     if (!await canClose()) { await removeLabel(pr.number, config.cleanupLabel); return; }
-    await api.pulls.update({ ...repo, pull_number: pr.number, state: 'closed' });
+    const { data: closed } = await api.pulls.update({ ...repo, pull_number: pr.number, state: 'closed' });
+    // Written once, tied to this exact closure. If this write fails recovery is
+    // simply unavailable: reported, never unsafe.
+    if (record) await attempt(`Closure record for #${pr.number}`, () => say(pr.number, recordKey, recordText({ ...record, closed: closed.closed_at })));
     // Keep the cached list consistent before checking duplicates or releasing
     // assignments. Do not paginate the entire repository after each closure.
     if (openPRSnapshot) openPRSnapshot = openPRSnapshot.filter(p => p.number !== pr.number);
     await releaseClosedPR(await getPR(pr.number));
     await removeLabel(pr.number, config.cleanupLabel);
   }
+  // Everything about one linked issue except duplicate detection, so a PR's
+  // eligibility never depends on other PRs. `fetchIssue` decides whether triage
+  // may be completed (the PR under validation) or the issue is only read.
+  async function assessLink(pr, link, fetchIssue) {
+    const result = { failures: [], closures: [], issue: null, available: false, unassigned: false };
+    let issue;
+    try { issue = await fetchIssue(link.number); } catch (error) {
+      if (error.status !== 404) throw error;
+      result.failures.push(`Issue #${link.number} does not exist in this repository.`);
+      return result;
+    }
+    result.issue = issue;
+    if (issue.pull_request) { result.failures.push(`#${link.number} is a PR, not an issue.`); return result; }
+    if (issue.state !== 'open') result.failures.push(`Issue #${link.number} is closed.`);
+    if (hasLabel(issue, config.needsTriageLabel)) {
+      result.failures.push(`Issue #${link.number} needs maintainer triage.`);
+      if (link.closes) result.closures.push(`Issue #${link.number} needs maintainer triage before a fixing PR can be reviewed. Please wait for triage and assignment, then reopen this PR.`);
+    }
+    if (!assignedTo(issue, pr.user.login)) {
+      const reason = `You are not assigned to issue #${link.number}. Please ask a maintainer to assign you before this check can pass. Reopening does not assign you by itself: only a PR that the bot closed for inactivity can have its assignment restored automatically, and only when the issue is still free. Otherwise ask a maintainer to assign you.`;
+      result.failures.push(reason);
+      if (link.closes) { result.closures.push(reason); result.unassigned = true; }
+    } else if (issue.state === 'open' && !hasLabel(issue, config.needsTriageLabel)) {
+      result.available = true;
+    }
+    return result;
+  }
+  // A PR may block a later PR only if it would pass every non-duplicate check.
+  async function eligible(pr) {
+    if (pr.state !== 'open') return false;
+    const links = issueLinks(pr.body, repository);
+    if (!links.length) return false;
+    for (const link of links) {
+      if ((await assessLink(pr, link, getIssue)).failures.length) return false;
+    }
+    return true;
+  }
   async function assessLinks(pr) {
     const failures = [];
     const closures = [];
+    const unassigned = [];
     const links = issueLinks(pr.body, repository);
     if (!links.length) failures.push('Link the issue with `Fixes #number` (or `Refs #number` for partial work).');
     let candidates;
     for (const link of links) {
-      let issue;
-      try { issue = await ensureTriage(link.number); } catch (error) {
-        if (error.status !== 404) throw error;
-        failures.push(`Issue #${link.number} does not exist in this repository.`);
-        continue;
+      const assessment = await assessLink(pr, link, ensureTriage);
+      failures.push(...assessment.failures);
+      closures.push(...assessment.closures);
+      if (assessment.unassigned) unassigned.push(link.number);
+      if (!assessment.available) continue;
+      candidates ??= await openPRs();
+      // Earlier open PRs by current assignees are only candidates. A candidate
+      // blocks this PR when it is itself eligible; ordering by number keeps the
+      // surviving PR deterministic whatever order events are processed in.
+      const possibleDuplicates = candidates.filter(other => other.number < pr.number &&
+        assignedTo(assessment.issue, other.user.login) &&
+        issueLinks(other.body, repository).some(l => l.number === link.number))
+        .sort((a, b) => a.number - b.number);
+      let duplicate;
+      for (const snapshot of possibleDuplicates) {
+        const current = await getPR(snapshot.number);
+        if (current.state === 'open' && assignedTo(assessment.issue, current.user.login) &&
+            issueLinks(current.body, repository).some(l => l.number === link.number) && await eligible(current)) {
+          duplicate = current;
+          break;
+        }
       }
-      if (issue.pull_request) { failures.push(`#${link.number} is a PR, not an issue.`); continue; }
-      if (issue.state !== 'open') failures.push(`Issue #${link.number} is closed.`);
-      if (hasLabel(issue, config.needsTriageLabel)) {
-        failures.push(`Issue #${link.number} needs maintainer triage.`);
-        if (link.closes) closures.push(`Issue #${link.number} needs maintainer triage before a fixing PR can be reviewed. Please wait for triage and assignment, then reopen this PR.`);
-      }
-      if (!assignedTo(issue, pr.user.login)) {
-        const reason = `You are not assigned to issue #${link.number}. Please ask a maintainer to assign you before this check can pass.`;
+      if (duplicate) {
+        const reason = `Issue #${link.number} already has an open PR from a current assignee: #${duplicate.number}. Please continue there instead of opening a duplicate.`;
         failures.push(reason);
-        if (link.closes) closures.push(reason);
-      } else if (issue.state === 'open' && !hasLabel(issue, config.needsTriageLabel)) {
-        candidates ??= await openPRs();
-        // Keep the earliest open PR from a current assignee. An older PR by
-        // someone without the assignment must not reserve the issue.
-        const possibleDuplicates = candidates.filter(other => other.number < pr.number &&
-          assignedTo(issue, other.user.login) &&
-          issueLinks(other.body, repository).some(l => l.number === link.number))
-          .sort((a, b) => a.number - b.number);
-        let duplicate;
-        for (const snapshot of possibleDuplicates) {
-          const current = await getPR(snapshot.number);
-          if (current.state === 'open' && assignedTo(issue, current.user.login) &&
-              issueLinks(current.body, repository).some(l => l.number === link.number)) {
-            duplicate = current;
-            break;
-          }
-        }
-        if (duplicate) {
-          const reason = `Issue #${link.number} already has an open PR from a current assignee: #${duplicate.number}. Please continue there instead of opening a duplicate.`;
-          failures.push(reason);
-          closures.push(reason);
-        }
+        closures.push(reason);
       }
     }
-    return { failures, closures };
+    return { failures, closures, unassigned };
+  }
+  // Controlled recovery for a PR the bot closed for inactivity and its author reopened.
+  // Everything is decided from bot-written records and the live issue state, never
+  // from contributor-controlled text. Returns true only when the assignment was restored.
+  async function recoverAssignment(pr, targets) {
+    const user = pr.user.login;
+    const timeline = await events(pr.number);
+    const byTime = (a, b) => time(a.created_at) - time(b.created_at) || (a.id ?? 0) - (b.id ?? 0);
+    const closedEvent = timeline.filter(e => e.event === 'closed').sort(byTime).at(-1);
+    // The latest closure must be the bot's own, and the author must have reopened it afterwards.
+    if (!closedEvent || closedEvent.actor?.login !== BOT || closedEvent.actor?.type !== 'Bot') return false;
+    const reopened = timeline.filter(e => e.event === 'reopened' && time(e.created_at) >= time(closedEvent.created_at)).sort(byTime).at(-1);
+    if (!reopened || !sameUser(reopened.actor?.login, user)) return false;
+    const discussion = await comments(pr.number);
+    const records = discussion.filter(c => c.user.login === BOT && c.user.type === 'Bot' && c.body?.startsWith(recordPrefix)).map(c => {
+      try { return JSON.parse(c.body.match(/<!-- policy-data (\{.*\}) -->/)?.[1]); } catch { return null; }
+    });
+    // The record must name this author and this very closure (not an earlier cycle's).
+    const record = records.find(r => r && sameUser(r.user, user) && Array.isArray(r.issues) && time(r.closed) > 0 && Math.abs(time(r.closed) - time(closedEvent.created_at)) <= 5000);
+    if (!record) return false;
+    const key = `stale-recovery-${time(closedEvent.created_at)}`;
+    // One attempt per closure: a repeated event, or a later unassignment by a maintainer, is never overridden.
+    if (discussion.some(c => botComment(c, `<!-- kubescape-policy:${key} -->`))) return false;
+    const refuse = async reason => {
+      await say(pr.number, key, `@${user}, your assignment could not be restored automatically: ${reason} Once that is resolved, ask a maintainer to assign you, then reopen this PR.`);
+      return false;
+    };
+    const unrecorded = targets.find(n => !record.issues.includes(n));
+    if (unrecorded) return refuse(`you were not assigned to #${unrecorded} when this PR was closed.`);
+    // Every condition is evaluated on the live state, and again immediately before each write.
+    async function problem(number) {
+      const assignments = await list(api.issues.listForRepo, { state: 'open', assignee: user });
+      const current = await getPR(pr.number);
+      if (current.state !== 'open' || current.head.sha !== pr.head.sha || current.body !== pr.body) return 'this PR changed while it was being checked.';
+      for (const other of await openPRs(true)) {
+        if (other.number === pr.number || !issueLinks(other.body, repository).some(l => l.number === number)) continue;
+        if (await eligible(await getPR(other.number))) return `#${other.number} is already an eligible PR for #${number}.`;
+      }
+      // The issue itself is read last, so the decision uses the freshest possible state.
+      let issue;
+      try { issue = await getIssue(number); } catch (error) {
+        if (error.status === 404) return `#${number} does not exist.`;
+        throw error;
+      }
+      if (issue.pull_request) return `#${number} is a PR, not an issue.`;
+      const blocked = assignmentProblem(issue, user, assignments.filter(i => i.number !== number));
+      return blocked ? `#${number}: ${blocked}` : '';
+    }
+    // The PR must satisfy every other requirement once the assignment exists.
+    const hypothetical = async n => {
+      const issue = await getIssue(n);
+      return targets.includes(n) ? { ...issue, assignees: [...issue.assignees, { login: user }] } : issue;
+    };
+    const links = issueLinks(pr.body, repository);
+    if (!links.length) return refuse('this PR does not link an issue.');
+    for (const link of links) {
+      const result = await assessLink(pr, link, hypothetical);
+      if (result.failures.length) return refuse(result.failures[0]);
+    }
+    for (const number of targets) {
+      const blocked = await problem(number);
+      if (blocked) return refuse(blocked);
+    }
+    // Capacity across the whole recovery, decided before anything is assigned: the
+    // contributor's other open assignments plus every issue about to be restored.
+    const held = (await list(api.issues.listForRepo, { state: 'open', assignee: user })).filter(i => !targets.includes(i.number));
+    const planned = [];
+    for (const number of targets) {
+      const issue = await getIssue(number);
+      const blocked = assignmentProblem(issue, user, [...held, ...planned]);
+      if (blocked) return refuse(`#${number}: ${blocked}`);
+      planned.push({ ...issue, assignees: [{ login: user }] });
+    }
+    const restored = [];
+    // All or nothing: whatever fails part-way (a refusal, a dropped assignee or an API error),
+    // every issue restored so far is released again. Each release is attempted independently,
+    // so one failing call cannot stop the others; failures are reported at the end of the run.
+    const rollback = async () => {
+      for (const earlier of restored.splice(0)) {
+        await attempt(`Rollback of the assignment to #${earlier}`, () => api.issues.removeAssignees({ ...repo, issue_number: earlier, assignees: [user] }));
+        await attempt(`Assigned label sync for #${earlier}`, () => syncAssignedLabel(earlier));
+      }
+    };
+    let failure = '';
+    try {
+      for (const number of targets) {
+        const blocked = await problem(number); // immediately before the write
+        if (blocked) { failure = blocked; break; }
+        const { data } = await api.issues.addAssignees({ ...repo, issue_number: number, assignees: [user] });
+        // GitHub silently drops assignees it will not accept.
+        if (!assignedTo(data, user)) { failure = `GitHub did not assign you to #${number}.`; break; }
+        restored.push(number);
+      }
+    } catch (error) {
+      await rollback();
+      throw error; // No outcome is recorded, so the next run retries from a clean or converging state.
+    }
+    if (failure) {
+      await rollback();
+      return refuse(failure);
+    }
+    for (const number of restored) await attempt(`Assigned label sync for #${number}`, () => syncAssignedLabel(number));
+    await say(pr.number, key, `@${user}, your assignment to ${restored.map(n => `#${n}`).join(', ')} has been restored because the bot closed this PR for inactivity and you reopened it. Your response window starts again now (reminder after ${config.inactivityReminderDays} days, closure after ${config.inactivityExpiryDays}). All other policy checks, including duplicate PR detection, still apply.`);
+    return true;
   }
   const checkedHeads = new Set();
   async function checkPR(number) {
@@ -297,7 +476,11 @@ async function run({ github, context, core, start, now = Date.now() }) {
       const current = await getPR(snapshot.number);
       if (current.state !== 'open' || current.head.sha !== pr.head.sha) continue;
       const exempt = !issuesEnabled || time(current.created_at) < startsAt || current.user.type === 'Bot' || await maintainer(current.user.login);
-      results.push({ pr: current, ...(exempt ? { failures: [], closures: [] } : await assessLinks(current)) });
+      let assessment = exempt ? { failures: [], closures: [], unassigned: [] } : await assessLinks(current);
+      // About to close for a missing assignment: a PR the bot closed for inactivity may qualify for recovery.
+      // An API failure here aborts the check (the PR stays open and failing) rather than closing it.
+      if (assessment.unassigned.length && await recoverAssignment(current, assessment.unassigned)) assessment = await assessLinks(current);
+      results.push({ pr: current, ...assessment });
     }
     const failed = results.some(r => r.failures.length);
     await api.checks.update({ ...repo, check_run_id: check.id, status: 'completed', conclusion: failed ? 'failure' : 'success',
@@ -314,78 +497,124 @@ async function run({ github, context, core, start, now = Date.now() }) {
       });
     }
   }
+  // Keep the Assigned label equal to "has at least one assignee" for open issues.
+  async function reconcileAssignedLabels() {
+    const listed = [...await list(api.issues.listForRepo, { state: 'open', labels: config.assignedLabel }),
+      ...await list(api.issues.listForRepo, { state: 'open', assignee: '*' })];
+    // The listings only select candidates; syncAssignedLabel decides from live state.
+    // Pre-rollout issues are skipped from the listing data alone (no extra calls).
+    const wrong = new Set(listed.filter(i => !i.pull_request && (i.assignees.length > 0) !== hasLabel(i, config.assignedLabel) &&
+      (!i.assignees.length || time(i.updated_at) >= startsAt || time(i.created_at) >= startsAt)).map(i => i.number));
+    for (const number of wrong) await attempt(`Assigned label sync for #${number}`, () => syncAssignedLabel(number));
+  }
+  const reminderGate = (reminder, notBefore) => {
+    // A reminder only counts when GitHub's own timestamp for it is valid and not
+    // earlier than the cycle it belongs to. Anything else is unknown state.
+    const sentAt = time(reminder?.created_at);
+    return sentAt > 0 && sentAt >= notBefore ? sentAt : 0;
+  };
+  // A destructive action needs both the inactivity period and a full gap after
+  // the reminder. A late reminder therefore postpones the action.
+  const actionDue = (since, reminderAt) => now - since >= config.inactivityExpiryDays * DAY &&
+    now - reminderAt >= config.reminderToActionDays * DAY;
   async function expireAssignments(prs) {
     const issues = await list(api.issues.listForRepo, { state: 'open', labels: config.assignedLabel });
-    for (const snapshot of issues.filter(i => !i.pull_request)) {
+    // An issue untouched since rollout cannot hold a post-rollout assignment; skip it
+    // without fetching its details, timeline or comments.
+    for (const snapshot of issues.filter(i => !i.pull_request && !(i.updated_at && time(i.updated_at) < startsAt))) {
       const issue = await getIssue(snapshot.number);
       if (hasLabel(issue, config.pinnedLabel)) continue;
       const timeline = await events(issue.number);
       const discussion = await comments(issue.number);
       for (const assignee of issue.assignees) {
         if (await maintainer(assignee.login)) continue;
-        if (prs.some(p => sameUser(p.user.login, assignee.login) && issueLinks(p.body, repository).some(l => l.number === issue.number))) continue;
+        const hasLinkedPR = open => open.some(p => sameUser(p.user.login, assignee.login) &&
+          issueLinks(p.body, repository).some(l => l.number === issue.number));
+        if (hasLinkedPR(prs)) continue;
         const assignedAt = Math.max(0, ...timeline.filter(e => e.event === 'assigned' && sameUser(e.assignee?.login, assignee.login)).map(e => time(e.created_at)));
         if (assignedAt < startsAt) continue;
         const activity = assignmentActivity(timeline, discussion, assignee.login);
         if (!activity || activity < startsAt) continue;
-        const age = (now - activity) / DAY;
+        // The activity time identifies the cycle: qualifying activity starts a new
+        // cycle with no reminder, so one cycle never produces two reminders.
         const key = `assignment-reminder-${assignee.login}-${activity}`;
-        const warning = discussion.find(c => botComment(c, `<!-- kubescape-policy:${key} -->`));
-        // A missed scheduled run must not release an assignment without a warning.
-        if (age >= config.assignmentExpiryDays && warning && now - time(warning.created_at) >= DAY) {
-          const current = await getIssue(issue.number);
-          if (current.state !== 'open' || hasLabel(current, config.pinnedLabel) || !assignedTo(current, assignee.login)) continue;
-          const currentActivity = assignmentActivity(await events(issue.number), await comments(issue.number), assignee.login);
-          if (currentActivity !== activity) continue;
-          if ((await openPRs()).some(p => sameUser(p.user.login, assignee.login) && issueLinks(p.body, repository).some(l => l.number === issue.number))) continue;
-          if (!await unassign(issue.number, assignee.login, async () =>
-            assignmentActivity(await events(issue.number), await comments(issue.number), assignee.login) === activity, true)) continue;
-          await say(issue.number, `expired-${assignee.login}-${activity}`, `@${assignee.login}, this assignment was released after inactivity. Ask a maintainer to reassign you if you want to continue.`);
-        } else if (age >= config.assignmentReminderDays && !warning) {
-          await say(issue.number, key, `@${assignee.login}, please share an update or open a linked draft PR. Assignments may be released after ${config.assignmentExpiryDays} days without progress. Ask a maintainer to pin this issue if you need more time.`);
+        const reminder = discussion.find(c => botComment(c, `<!-- kubescape-policy:${key} -->`));
+        if (!reminder) {
+          if (now - activity >= config.inactivityReminderDays * DAY) {
+            await say(issue.number, key, `@${assignee.login}, please share an update or open a linked draft PR. Without progress, this assignment may be released after ${config.inactivityExpiryDays} days of inactivity, at least ${config.reminderToActionDays} days after this reminder. Ask a maintainer to pin this issue if you need more time.`);
+          }
+          continue;
         }
+        const reminderAt = reminderGate(reminder, activity);
+        if (!reminderAt || !actionDue(activity, reminderAt)) continue;
+        const stillIdle = async latest => latest.state === 'open' && !hasLabel(latest, config.pinnedLabel) && assignedTo(latest, assignee.login) &&
+          assignmentActivity(await events(issue.number), await comments(issue.number), assignee.login) === activity;
+        // Read the issue, its activity and the open PRs again immediately before
+        // releasing: new progress, a pin or a linked PR may have arrived since the
+        // run's snapshots were taken.
+        const released = await unassign(issue.number, assignee.login, undefined,
+          async latest => await stillIdle(latest) && !hasLinkedPR(await openPRs(true)));
+        if (!released) continue;
+        await say(issue.number, `expired-${assignee.login}-${activity}`, `@${assignee.login}, this assignment was released after ${config.inactivityExpiryDays} days of inactivity. If the issue is still open and unassigned, ask a maintainer to assign you again if you want to continue.`);
       }
     }
   }
-  async function requestedChangesActivity(pr) {
+  // Who must act next on a PR with an outstanding change request: the contributor
+  // (inside a response window) or the reviewer (waiting for review). Only the most
+  // recent valid request matters; earlier ones do not extend or shorten its window.
+  async function reviewState(pr) {
     const reviews = await list(api.pulls.listReviews, { pull_number: pr.number });
     const requests = [];
     for (const review of changesRequested(reviews)) {
       if (review.user.type !== 'Bot' && await maintainer(review.user.login)) requests.push(review);
     }
     if (!requests.length) return null;
+    const request = requests.reduce((a, b) => (time(b.submitted_at) - time(a.submitted_at) || b.id - a.id) > 0 ? b : a);
+    const requestedAt = time(request.submitted_at);
     const discussion = await comments(pr.number);
     const inline = await list(api.pulls.listReviewComments, { pull_number: pr.number });
-    const authorActivity = Math.max(0, ...[...discussion, ...inline].filter(c => sameUser(c.user.login, pr.user.login)).map(c => time(c.updated_at ?? c.created_at)),
-      ...reviews.filter(r => sameUser(r.user.login, pr.user.login)).map(r => time(r.submitted_at)));
-    const requestedAt = Math.max(...requests.map(r => time(r.submitted_at)));
-    return { discussion, authorActivity, requestedAt };
+    // Only the author's own comments, inline replies and reviews count. Bots, other
+    // users, label changes and edits to PR metadata never answer a request.
+    // A reopening restarts the window, so only what the author wrote after it counts.
+    const reopenedAt = Math.max(0, ...(await events(pr.number)).filter(e => e.event === 'reopened').map(e => time(e.created_at)));
+    const windowStart = Math.max(requestedAt, reopenedAt);
+    const wrote = [...discussion, ...inline].some(c => sameUser(c.user?.login, pr.user.login) && time(c.created_at) > windowStart) ||
+      reviews.some(r => sameUser(r.user?.login, pr.user.login) && time(r.submitted_at) > windowStart);
+    // A push shows as a head commit different from the one that was reviewed.
+    const pushed = Boolean(request.commit_id) && request.commit_id !== pr.head.sha;
+    return { request, requestedAt, discussion, responded: wrote || pushed, known: Boolean(requestedAt && request.commit_id), windowStart };
   }
   async function expirePR(snapshot) {
     const pr = await getPR(snapshot.number);
     if (pr.state !== 'open' || time(pr.created_at) < startsAt || pr.user.type === 'Bot' || await maintainer(pr.user.login) || hasLabel(pr, config.pinnedLabel)) return;
-    const activityState = await requestedChangesActivity(pr);
-    if (!activityState) { await removeLabel(pr.number, config.staleLabel); return; }
-    const { discussion, authorActivity, requestedAt } = activityState;
-    const warningPrefix = `<!-- kubescape-policy:stale-${pr.head.sha}-`;
-    const warning = discussion.filter(c => c.user.login === BOT && c.user.type === 'Bot' && c.body?.startsWith(warningPrefix)).sort((a, b) => b.id - a.id)[0];
-    if (hasLabel(pr, config.staleLabel) && warning && authorActivity <= time(warning.created_at) && requestedAt <= time(warning.created_at)) {
-      if (now - time(warning.created_at) >= config.stalePRCloseDays * DAY) {
-        await closePR(pr, `Closing because the requested changes remained inactive for ${config.stalePRCloseDays} days after the reminder. You can reopen this PR when ready to continue.`, async current => {
-          const latest = await requestedChangesActivity(current);
-          return latest && latest.authorActivity <= time(warning.created_at) && latest.requestedAt <= time(warning.created_at);
-        });
+    const state = await reviewState(pr);
+    // No outstanding request, or the contributor has responded and the next move
+    // is the reviewer's: nothing here may close the PR for contributor inactivity.
+    if (!state || state.responded || !state.requestedAt) { await removeLabel(pr.number, config.staleLabel); return; }
+    const key = `pr-reminder-${state.request.id}-${state.windowStart}`;
+    const reminder = state.discussion.find(c => botComment(c, `<!-- kubescape-policy:${key} -->`));
+    if (!reminder) {
+      if (now - state.windowStart < config.inactivityReminderDays * DAY) {
+        await removeLabel(pr.number, config.staleLabel); // Left over from an earlier cycle.
+        return;
       }
+      // The reminder must exist before the label or any later closure.
+      await say(pr.number, key, `The requested changes have had no response for ${config.inactivityReminderDays} days. Please push an update or reply. Without a response this PR may be closed after ${config.inactivityExpiryDays} days of inactivity, at least ${config.reminderToActionDays} days after this reminder. A PR waiting for maintainer review is not closed.`);
+      await addLabel(pr.number, config.staleLabel);
       return;
     }
-    if (hasLabel(pr, config.staleLabel)) {
-      await removeLabel(pr.number, config.staleLabel);
-      return; // Give resumed work a fresh inactivity window.
-    }
-    const activity = Math.max(time(pr.updated_at), authorActivity, requestedAt);
-    if (now - activity < config.requestedChangesStaleDays * DAY) return;
-    await say(pr.number, `stale-${pr.head.sha}-${activity}`, `The requested changes have been inactive for ${config.requestedChangesStaleDays} days. Please push an update or reply within ${config.stalePRCloseDays} days to keep this PR open.`);
-    await addLabel(pr.number, config.staleLabel);
+    const reminderAt = reminderGate(reminder, state.windowStart);
+    // The reminder exists, so the PR must be stale: repair a label that failed to
+    // apply or was removed, and never close without it.
+    if (reminderAt) await addLabel(pr.number, config.staleLabel);
+    // Without a verifiable reviewed commit a push cannot be ruled out: do not close.
+    if (!reminderAt || !state.known || !actionDue(state.windowStart, reminderAt)) return;
+    await closePR(pr, `Closing because the requested changes received no response for ${config.inactivityExpiryDays} days, including ${config.reminderToActionDays} days after the reminder.\n\nTo continue, reopen this PR. If the linked issue is still open, triaged and unassigned, you are under the assignment limit and no other eligible PR exists for it, your assignment is restored automatically and a new response window starts (reminder after ${config.inactivityReminderDays} days, closure after ${config.inactivityExpiryDays}). Otherwise you will be told why; ask a maintainer to assign you, or coordinate with the current assignee.`, async current => {
+      const latest = await reviewState(current);
+      return Boolean(latest && !latest.responded && latest.known && latest.request.id === state.request.id &&
+        latest.windowStart === state.windowStart && actionDue(latest.windowStart, reminderAt) &&
+        latest.discussion.some(c => botComment(c, `<!-- kubescape-policy:${key} -->`)));
+    }, `stale-closure-${state.request.id}-${state.windowStart}`);
   }
 
   const { payload, eventName } = context;
@@ -395,11 +624,18 @@ async function run({ github, context, core, start, now = Date.now() }) {
     }
   }
   if (eventName === 'issue_comment') await handleCommand(payload);
+  if (eventName === 'issues' && (payload.action === 'unassigned' ||
+    (['labeled', 'unlabeled'].includes(payload.action) && payload.label?.name === config.assignedLabel))) {
+    // UI unassignments and manual label edits must not leave the label wrong.
+    // The live issue decides: a newer assignment keeps the label.
+    await attempt(`Assigned label sync for #${payload.issue.number}`, () => syncAssignedLabel(payload.issue.number));
+  }
   if (eventName === 'issues' && payload.action === 'assigned') {
     const number = payload.issue.number;
     const target = payload.assignee?.login;
     const current = await ensureTriage(number);
     if (target && assignedTo(current, target)) {
+      let synced = false;
       const timeline = await events(number);
       const latest = timeline.filter(e => ['assigned', 'unassigned'].includes(e.event) && sameUser(e.assignee?.login, target))
         .sort((a, b) => b.id - a.id)[0];
@@ -413,13 +649,12 @@ async function run({ github, context, core, start, now = Date.now() }) {
           const assignments = await list(api.issues.listForRepo, { state: 'open', assignee: target });
           problem = assignmentProblem({ ...current, assignees: [] }, target, assignments.filter(i => i.number !== number));
         }
-        if (problem) {
-          if (await unassign(number, target, async () => (await latestAssignment(number, target))?.id === latest.id)) {
-            await say(number, `assignment-${latest.id}`, `@${target}, ${problem}`);
-          }
+        if (problem && await unassign(number, target, async () => (await latestAssignment(number, target))?.id === latest.id)) {
+          synced = true; // unassign() already synchronized the label.
+          await say(number, `assignment-${latest.id}`, `@${target}, ${problem}`);
         }
       }
-      if ((await getIssue(number)).assignees.length) await addLabel(number, config.assignedLabel);
+      if (!synced) await attempt(`Assigned label sync for #${number}`, () => syncAssignedLabel(number));
     }
   }
   if (eventName === 'pull_request_target') {
@@ -429,20 +664,40 @@ async function run({ github, context, core, start, now = Date.now() }) {
       await removeLabel(payload.pull_request.number, config.staleLabel);
     }
     await checkPR(payload.pull_request.number);
+    if (['opened', 'reopened', 'edited', 'closed'].includes(payload.action)) {
+      // These events can change which PR is the eligible earliest one for an
+      // issue, so every other open PR sharing a linked issue is validated again.
+      const subject = await getPR(payload.pull_request.number);
+      const linked = new Set([subject.body, payload.changes?.body?.from].flatMap(body => issueLinks(body, repository).map(l => l.number)));
+      for (const other of await openPRs(true)) {
+        if (other.number !== subject.number && issueLinks(other.body, repository).some(l => linked.has(l.number))) {
+          await attempt(`PR #${other.number} duplicate revalidation`, () => checkPR(other.number));
+        }
+      }
+    }
     if (errors.length) throw new AggregateError(errors, errors.map(e => e.message).join('\n'));
     return;
   }
   const prs = await openPRs();
   const affectedIssue = payload.issue?.number;
+  const linksOf = pr => issueLinks(pr.body, repository).map(l => l.number);
+  // An issue event changes the eligibility of the PRs that link it, and eligibility
+  // decides whether those PRs block others on their other issues. Revalidate PRs
+  // sharing an issue with a directly affected PR as well.
+  const direct = affectedIssue ? prs.filter(pr => linksOf(pr).includes(affectedIssue)) : prs;
+  const related = new Set(direct.flatMap(linksOf));
   for (const pr of prs) {
-    if (affectedIssue && !issueLinks(pr.body, repository).some(l => l.number === affectedIssue)) continue;
+    if (affectedIssue && !direct.includes(pr) && !linksOf(pr).some(number => related.has(number))) continue;
     await attempt(`PR #${pr.number}`, () => checkPR(pr.number));
   }
   if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
     // Refresh once before expiry to include PRs opened during a long check run.
     // All checks share one listing; all expiry operations share this second one.
     const remaining = await openPRs(true);
-    if (issuesEnabled) await attempt('Assignment expiry', () => expireAssignments(remaining));
+    if (issuesEnabled) {
+      await attempt('Assigned label reconciliation', reconcileAssignedLabels);
+      await attempt('Assignment expiry', () => expireAssignments(remaining));
+    }
     for (const pr of remaining) await attempt(`PR #${pr.number} expiry`, () => expirePR(pr));
     const cleanup = await list(api.issues.listForRepo, { state: 'all', labels: config.cleanupLabel });
     for (const item of cleanup.filter(i => i.pull_request)) {
